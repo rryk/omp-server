@@ -31,6 +31,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using HttpServer;
+using System.Net;
 
 namespace OpenSim.Framework.Servers.HttpServer
 {
@@ -183,6 +184,14 @@ namespace OpenSim.Framework.Servers.HttpServer
                 {
                     throw new InvalidOperationException("The socket has been shutdown");
                 }
+            }
+        }
+
+        public IPEndPoint RemoteIPEndpoint
+        {
+            get
+            {
+                return _request.RemoteIPEndPoint;
             }
         }
 

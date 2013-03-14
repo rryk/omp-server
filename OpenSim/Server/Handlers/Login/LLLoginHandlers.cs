@@ -186,12 +186,17 @@ namespace OpenSim.Server.Handlers.Login
         public void HandleKIARALogin(string servicepath, WebSocketHttpServerHandler handler)
         {
             handler.OnData += delegate(object sender, WebsocketDataEventArgs rawData) {
+                // Read method name and UID of the call.
                 SerializedDataReader reader = new SerializedDataReader(rawData.Data);
                 uint uid = reader.ReadUint32();
                 string methodName = reader.ReadString();
 
+                // Write UID of the call into response.
+                SerializedDataWriter writer = new SerializedDataWriter();
+                writer.WriteUint32(uid);
+
                 if (methodName.Equals("opensim.login.login_to_simulator")) {
-                    // Read and convert login request into OSD.
+                    // Convert login request into OSD.
                     OSDMap request = new OSDMap();
                     request["first"] = OSD.FromString(reader.ReadString());
                     request["last"] = OSD.FromString(reader.ReadString());
@@ -205,7 +210,7 @@ namespace OpenSim.Server.Handlers.Login
                     UInt32 numOptions = reader.ReadUint32();
                     OSDArray options = new OSDArray((int)numOptions);
                     for (int i = 0; i < numOptions; i++)
-                        options[i] = OSD.FromString(reader.ReadString());
+                        options.Add (OSD.FromString(reader.ReadString()));
                     request["options"] = options;
 
                     request["id0"] = OSD.FromString(reader.ReadString());
@@ -214,10 +219,9 @@ namespace OpenSim.Server.Handlers.Login
                     request["viewer_digest"] = OSD.FromString(reader.ReadString());
 
                     // Execute login using LLSD login.
-                    OSDMap response = (OSDMap)HandleLLSDLogin(request, null);
+                    OSDMap response = (OSDMap)HandleLLSDLogin(request, handler.RemoteIPEndpoint);
 
-                    // Convert and write login response from OSD.
-                    SerializedDataWriter writer = new SerializedDataWriter();
+                    // Convert login response from OSD.
                     writer.WriteString(response["first_name"].AsString());
                     writer.WriteString(response["last_name"].AsString());
                     writer.WriteUint32(response["sim_ip"].AsUInteger());
@@ -235,10 +239,10 @@ namespace OpenSim.Server.Handlers.Login
                     writer.WriteString(response["seed_capability"].AsString());
                     writer.WriteUint32(response["agent_access"].AsString() == "Mature" ? 0u : 1u);
                     writer.WriteString(response["session_id"].AsString());
-
-                    // Send response.
-                    handler.SendData(writer.ToByteArray());
                 }
+
+                // Send response.
+                handler.SendData(writer.ToByteArray());
 
                 m_log.InfoFormat("[LOGIN]: Method {0} with uid {1} called.", methodName, uid);
             };
