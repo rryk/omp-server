@@ -55,6 +55,25 @@
         </Project>
 -->
 
+    <Project frameworkVersion="v3_5" name="KIARA" path="KIARA" type="Library">
+      <Configuration name="Debug">
+        <Options>
+          <OutputPath>../bin/</OutputPath>
+        </Options>
+      </Configuration>
+      <Configuration name="Release">
+        <Options>
+          <OutputPath>../bin/</OutputPath>
+        </Options>
+      </Configuration>
+
+      <ReferencePath>../bin/</ReferencePath>
+      <Reference name="System"/>
+      <Files>
+        <Match pattern="*.cs" recurse="false"/>
+      </Files>
+    </Project>
+
     <Project frameworkVersion="v3_5" name="SmartThreadPool" path="ThirdParty/SmartThreadPool" type="Library">
       <Configuration name="Debug">
         <Options>
@@ -1251,6 +1270,7 @@
       </Configuration>
 
       <ReferencePath>../../../bin/</ReferencePath>
+      <Reference name="KIARA"/>
       <Reference name="System"/>
       <Reference name="System.Xml"/>
       <Reference name="System.Web"/>

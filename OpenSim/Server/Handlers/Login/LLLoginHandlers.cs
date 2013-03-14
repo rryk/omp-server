@@ -44,6 +44,7 @@ using Nwc.XmlRpc;
 using Nini.Config;
 using log4net;
 
+using KIARA;
 
 namespace OpenSim.Server.Handlers.Login
 {
@@ -180,6 +181,69 @@ namespace OpenSim.Server.Handlers.Login
 
             return failResponse;
 
+        }
+
+        public void HandleKIARALogin(string servicepath, WebSocketHttpServerHandler handler)
+        {
+            handler.OnData += delegate(object sender, WebsocketDataEventArgs rawData) {
+                SerializedDataReader reader = new SerializedDataReader(rawData.Data);
+                uint uid = reader.ReadUint32();
+                string methodName = reader.ReadString();
+
+                if (methodName.Equals("opensim.login.login_to_simulator")) {
+                    // Read and convert login request into OSD.
+                    OSDMap request = new OSDMap();
+                    request["first"] = OSD.FromString(reader.ReadString());
+                    request["last"] = OSD.FromString(reader.ReadString());
+                    request["passwd"] = OSD.FromString(reader.ReadString());
+                    request["start"] = OSD.FromString(reader.ReadString());
+                    request["channel"] = OSD.FromString(reader.ReadString());
+                    request["version"] = OSD.FromString(reader.ReadString());
+                    request["platform"] = OSD.FromString(reader.ReadString());
+                    request["mac"] = OSD.FromString(reader.ReadString());
+
+                    UInt32 numOptions = reader.ReadUint32();
+                    OSDArray options = new OSDArray((int)numOptions);
+                    for (int i = 0; i < numOptions; i++)
+                        options[i] = OSD.FromString(reader.ReadString());
+                    request["options"] = options;
+
+                    request["id0"] = OSD.FromString(reader.ReadString());
+                    request["agree_to_tos"] = OSD.FromString(reader.ReadString());
+                    request["read_critical"] = OSD.FromString(reader.ReadString());
+                    request["viewer_digest"] = OSD.FromString(reader.ReadString());
+
+                    // Execute login using LLSD login.
+                    OSDMap response = (OSDMap)HandleLLSDLogin(request, null);
+
+                    // Convert and write login response from OSD.
+                    SerializedDataWriter writer = new SerializedDataWriter();
+                    writer.WriteString(response["first_name"].AsString());
+                    writer.WriteString(response["last_name"].AsString());
+                    writer.WriteUint32(response["sim_ip"].AsUInteger());
+                    writer.WriteString(response["start_location"].AsString());
+                    writer.WriteUint32(response["seconds_since_epoch"].AsUInteger());
+                    writer.WriteString(response["message"].AsString());
+                    writer.WriteUint32(response["circuit_code"].AsUInteger());
+                    writer.WriteUint16((UInt16)response["sim_port"].AsUInteger());
+                    writer.WriteString(response["secure_session_id"].AsString());
+                    writer.WriteString(response["look_at"].AsString());
+                    writer.WriteString(response["agent_id"].AsString());
+                    writer.WriteString(response["inventory_host"].AsString());
+                    writer.WriteInt32(response["region_y"].AsInteger());
+                    writer.WriteInt32(response["region_x"].AsInteger());
+                    writer.WriteString(response["seed_capability"].AsString());
+                    writer.WriteUint32(response["agent_access"].AsString() == "Mature" ? 0u : 1u);
+                    writer.WriteString(response["session_id"].AsString());
+
+                    // Send response.
+                    handler.SendData(writer.ToByteArray());
+                }
+
+                m_log.InfoFormat("[LOGIN]: Method {0} with uid {1} called.", methodName, uid);
+            };
+
+            handler.HandshakeAndUpgrade();
         }
 
         public OSD HandleLLSDLogin(OSD request, IPEndPoint remoteClient)
