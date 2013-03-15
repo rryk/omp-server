@@ -13,7 +13,7 @@ namespace KIARA
             offset = 0;
         }
 
-        public string ReadString()
+        public string ReadZCString()
         {
             StringBuilder builder = new StringBuilder();
             char c = BitConverter.ToChar(rawData, offset);

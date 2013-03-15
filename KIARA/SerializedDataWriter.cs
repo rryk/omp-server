@@ -7,7 +7,7 @@ namespace KIARA
     {
         private List<byte> data = new List<byte>();
 
-        public void WriteString(string value) {
+        public void WriteZCString(string value) {
             // Write characters.
             for (int i = 0; i < value.Length; i++)
                 WriteUint16(value[i]);

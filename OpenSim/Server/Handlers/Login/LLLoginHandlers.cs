@@ -189,7 +189,7 @@ namespace OpenSim.Server.Handlers.Login
                 // Read method name and UID of the call.
                 SerializedDataReader reader = new SerializedDataReader(rawData.Data);
                 uint uid = reader.ReadUint32();
-                string methodName = reader.ReadString();
+                string methodName = reader.ReadZCString();
 
                 // Write UID of the call into response.
                 SerializedDataWriter writer = new SerializedDataWriter();
@@ -198,47 +198,48 @@ namespace OpenSim.Server.Handlers.Login
                 if (methodName.Equals("opensim.login.login_to_simulator")) {
                     // Convert login request into OSD.
                     OSDMap request = new OSDMap();
-                    request["first"] = OSD.FromString(reader.ReadString());
-                    request["last"] = OSD.FromString(reader.ReadString());
-                    request["passwd"] = OSD.FromString(reader.ReadString());
-                    request["start"] = OSD.FromString(reader.ReadString());
-                    request["channel"] = OSD.FromString(reader.ReadString());
-                    request["version"] = OSD.FromString(reader.ReadString());
-                    request["platform"] = OSD.FromString(reader.ReadString());
-                    request["mac"] = OSD.FromString(reader.ReadString());
+                    request["first"] = OSD.FromString(reader.ReadZCString());
+                    request["last"] = OSD.FromString(reader.ReadZCString());
+                    request["passwd"] = OSD.FromString(reader.ReadZCString());
+                    request["start"] = OSD.FromString(reader.ReadZCString());
+                    request["channel"] = OSD.FromString(reader.ReadZCString());
+                    request["version"] = OSD.FromString(reader.ReadZCString());
+                    request["platform"] = OSD.FromString(reader.ReadZCString());
+                    request["mac"] = OSD.FromString(reader.ReadZCString());
 
                     UInt32 numOptions = reader.ReadUint32();
                     OSDArray options = new OSDArray((int)numOptions);
                     for (int i = 0; i < numOptions; i++)
-                        options.Add (OSD.FromString(reader.ReadString()));
+                        options.Add (OSD.FromString(reader.ReadZCString()));
                     request["options"] = options;
 
-                    request["id0"] = OSD.FromString(reader.ReadString());
-                    request["agree_to_tos"] = OSD.FromString(reader.ReadString());
-                    request["read_critical"] = OSD.FromString(reader.ReadString());
-                    request["viewer_digest"] = OSD.FromString(reader.ReadString());
+                    request["id0"] = OSD.FromString(reader.ReadZCString());
+                    request["agree_to_tos"] = OSD.FromString(reader.ReadZCString());
+                    request["read_critical"] = OSD.FromString(reader.ReadZCString());
+                    request["viewer_digest"] = OSD.FromString(reader.ReadZCString());
 
                     // Execute login using LLSD login.
                     OSDMap response = (OSDMap)HandleLLSDLogin(request, handler.RemoteIPEndpoint);
 
                     // Convert login response from OSD.
-                    writer.WriteString(response["first_name"].AsString());
-                    writer.WriteString(response["last_name"].AsString());
-                    writer.WriteUint32(response["sim_ip"].AsUInteger());
-                    writer.WriteString(response["start_location"].AsString());
+                    writer.WriteZCString(response["first_name"].AsString());
+                    writer.WriteZCString(response["last_name"].AsString());
+                    writer.WriteZCString(response["login"].AsString());
+                    writer.WriteZCString(response["sim_ip"].AsString());
+                    writer.WriteZCString(response["start_location"].AsString());
                     writer.WriteUint32(response["seconds_since_epoch"].AsUInteger());
-                    writer.WriteString(response["message"].AsString());
+                    writer.WriteZCString(response["message"].AsString());
                     writer.WriteUint32(response["circuit_code"].AsUInteger());
                     writer.WriteUint16((UInt16)response["sim_port"].AsUInteger());
-                    writer.WriteString(response["secure_session_id"].AsString());
-                    writer.WriteString(response["look_at"].AsString());
-                    writer.WriteString(response["agent_id"].AsString());
-                    writer.WriteString(response["inventory_host"].AsString());
+                    writer.WriteZCString(response["secure_session_id"].AsString());
+                    writer.WriteZCString(response["look_at"].AsString());
+                    writer.WriteZCString(response["agent_id"].AsString());
+                    writer.WriteZCString(response["inventory_host"].AsString());
                     writer.WriteInt32(response["region_y"].AsInteger());
                     writer.WriteInt32(response["region_x"].AsInteger());
-                    writer.WriteString(response["seed_capability"].AsString());
+                    writer.WriteZCString(response["seed_capability"].AsString());
                     writer.WriteUint32(response["agent_access"].AsString() == "Mature" ? 0u : 1u);
-                    writer.WriteString(response["session_id"].AsString());
+                    writer.WriteZCString(response["session_id"].AsString());
                 }
 
                 // Send response.
