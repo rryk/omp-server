@@ -9,5 +9,8 @@ namespace KIARA {
 
   // Raised when IDL function with a specified name is unknown.
   public class UnknownIDLFunctionException : KIARAException {}
+
+  // Raised when parsing type mapping string fails.
+  public class TypeMappingParserException : KIARAException {}
 }
 

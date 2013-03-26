@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 
 namespace KIARA {
-  public class DataType {
+  public class IDLDataType {
     static public bool IsBaseType(string typeName) {
       return typeName == "boolean" || typeName == "i8" || typeName == "u8" || typeName == "i16" || 
         typeName == "u16" || typeName == "i32" || typeName == "u32" || typeName == "i64" || 
@@ -11,30 +11,30 @@ namespace KIARA {
     }
   }
 
-  public class BaseType : DataType {}
+  public class IDLBaseType : IDLDataType {}
 
-  public class StructType : DataType {
-    public StructType(Dictionary<string, string> fields) {
+  public class IDLStructType : IDLDataType {
+    public IDLStructType(Dictionary<string, string> fields) {
       Fields = fields;
     }
 
     public Dictionary<string, string> Fields { get; private set; }
   }
 
-  public class EnumType : DataType {
-    public EnumType(Dictionary<string, int> values) {
+  public class IDLEnumType : IDLDataType {
+    public IDLEnumType(Dictionary<string, int> values) {
       Values = values;
     }
 
     public Dictionary<string, int> Values { get; private set; }
   }
 
-  public class ArrayType : DataType {
-    public ArrayType(DataType elementType) {
+  public class IDLArrayType : IDLDataType {
+    public IDLArrayType(IDLDataType elementType) {
       ElementType = elementType;
     }
 
-    public DataType ElementType { get; private set; }
+    public IDLDataType ElementType { get; private set; }
   }
 }
 

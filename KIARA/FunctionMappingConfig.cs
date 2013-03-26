@@ -3,25 +3,87 @@ using System.Collections.Generic;
 
 namespace KIARA {
   public class FunctionMappingConfig {
+    // Constructs mapping config by parsing an IDL document at |idlURI|.
     public FunctionMappingConfig(string idlURI) {
       LoadIDL(idlURI);
     }
 
+    // Registers a |nativeFuntion| as a handler for the |idlFunction|. |typeMapping| is used
+    // to convert arguments.
     public void RegisterFunction(string idlFunction, Type nativeFunction, string typeMapping) {
       RegisteredFunction function = new RegisteredFunction();
       function.IDLFunction = GetIDLFunctionByFullName(idlFunction);
 
+      List<WireEncodingEntry> argsEncoding;
+      List<WireEncodingEntry> resultEncoding;
+      ParseTypeMapping(typeMapping, out argsEncoding, out resultEncoding);
+      function.ArgsEncoding = argsEncoding.ToArray();
+      function.ResultEncoding = resultEncoding.ToArray();
+
       // TODO(rryk): Check correspondence of the parameters.
-      // TODO(rryk): Parsing type mapping and set wire format (hack).
+      function.NativeFunction = nativeFunction;
 
       RegisteredFunctions[idlFunction] = function;
     }
 
-    public void UnregisterFunction(string idlName) {
-      if (RegisteredFunctions.ContainsKey(idlName))
-        RegisteredFunctions.Remove(idlName);
+    // Unregisters the handler for the |idlFunction|.
+    public void UnregisterFunction(string idlFunction) {
+      if (RegisteredFunctions.ContainsKey(idlFunction))
+        RegisteredFunctions.Remove(idlFunction);
       else
         throw new UnknownIDLFunctionException();
+    }
+
+    // Parses type mapping string and constructs |argsEncoding| and |resultEncoding|. Implemented
+    // as a hack - uses a dictionary for fixed strings for mapping.
+    private void ParseTypeMapping(string typeMapping, out List<WireEncodingEntry> argsEncoding,
+                                  out List<WireEncodingEntry> resultEncoding) {
+      if (typeMapping == "hard-coded-type-mapping-1") {
+        argsEncoding = new List<WireEncodingEntry>();
+        argsEncoding.AddRange(new List<WireEncodingEntry> {
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "name", "first"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "name", "first"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "name", "last"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "pwdHash"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "start"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "channel"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "version"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "platform"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "mac"),
+          new ArrayEncodingEntry(new List<WireEncodingEntry> {
+            new BaseEncodingEntry(WireEncoding.ZCString),
+          }, 0, "options"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "id0"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "agree_to_tos"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "read_critical"),
+          new BaseEncodingEntry(WireEncoding.ZCString, 0, "viewer_digest"),
+        });
+        resultEncoding = new List<WireEncodingEntry>();
+        resultEncoding.AddRange(new List<WireEncodingEntry> {
+          new BaseEncodingEntry(WireEncoding.ZCString, "name", "first"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "name", "last"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "login"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "sim_ip"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "start_location"),
+          new BaseEncodingEntry(WireEncoding.U32, "seconds_since_epoch"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "message"),
+          new BaseEncodingEntry(WireEncoding.U32, "circuit_code"),
+          new BaseEncodingEntry(WireEncoding.U16, "sim_port"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "secure_session_id"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "look_at"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "agent_id"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "inventory_host"),
+          new BaseEncodingEntry(WireEncoding.I32, "region_y"),
+          new BaseEncodingEntry(WireEncoding.I32, "region_x"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "seed_capability"),
+          new StringEnumEncodingEntry(
+            new Dictionary<string, int> {{"Mature", 0}, {"Teen", 1}},
+            "Mature", 0, "agent_access"),
+          new BaseEncodingEntry(WireEncoding.ZCString, "session_id"),
+        });
+      }
+
+      throw new TypeMappingParserException();
     }
 
     // Returns IDL function declaration give its name.
@@ -59,12 +121,12 @@ namespace KIARA {
       foreach (KeyValuePair<string, string> field in fields)
         fieldsWithNamespace.Add(field.Key, AppendNamespaceIfNecessary(field.Value));
 
-      DataTypes.Add(Namespace + "." + typeName, new StructType(fieldsWithNamespace));
+      DataTypes.Add(Namespace + "." + typeName, new IDLStructType(fieldsWithNamespace));
     }
 
     // Adds an enum type. |values| contains a map from string representation to an integer value.
     private void AddEnumType(string typeName, Dictionary<string, int> values) {
-      DataTypes.Add(Namespace + "." + typeName, new EnumType(values));
+      DataTypes.Add(Namespace + "." + typeName, new IDLEnumType(values));
     }
 
     // IDL Function declaration.
@@ -168,7 +230,7 @@ namespace KIARA {
     }
 
     // Path entry that represents field/property entry in a class/struct.
-    private class AttributeEntry : ValuePathEntry {
+    private class NameEntry : ValuePathEntry {
       public Type ObjectType;  // Object/struct type. Used to construct object.
       public string Name;
     }
@@ -190,20 +252,59 @@ namespace KIARA {
 
     abstract private class WireEncodingEntry {
       // Path where the value should be read from or where the value should stored to.
-      public ValuePathEntry[] ValuePath;
+      public ValuePathEntry[] ValuePath { get; private set; }
+
+      // Interprets an array of objects in |valuePath| as path to the value. For
+      // ints IndexEntry is created, for strings NameEntry is created.
+      protected void InterpretValuePath(object[] valuePath) {
+        List<ValuePathEntry> valuePathList = new List<ValuePathEntry>();
+        foreach(object valuePathEntry in valuePath) {
+          if (valuePathEntry.GetType() == typeof(int)) {
+            IndexEntry entry = new IndexEntry();
+            entry.Index = (int)valuePathEntry;
+            valuePathList.Add(entry);
+          } else if (valuePathEntry.GetType() == typeof(string)) {
+            NameEntry entry = new NameEntry();
+            entry.Name = (string)valuePathEntry;
+            valuePathList.Add(entry);
+          }
+        }
+
+        ValuePath = valuePathList.ToArray();
+      }
     }
 
     private class BaseEncodingEntry : WireEncodingEntry {
+      public BaseEncodingEntry(WireEncoding encoding, params object[] valuePath) {
+        Encoding = encoding;
+        InterpretValuePath(valuePath);
+      }
+
       // Wire encoding for a base data type.
-      public WireEncoding Encoding;
+      public WireEncoding Encoding { get; private set; }
     }
 
     private class ArrayEncodingEntry : WireEncodingEntry {
+      public ArrayEncodingEntry(List<WireEncodingEntry> elementEncoding,
+                                params object[] valuePath) {
+        ElementEncoding = elementEncoding.ToArray();
+        InterpretValuePath(valuePath);
+      }
+
       // Nested encoding for each array element. Nested pathes are relative.
-      public WireEncodingEntry[] NestedEncoding;
+      public WireEncodingEntry[] ElementEncoding { get; private set; }
     }
 
     private class StringEnumEncodingEntry : WireEncodingEntry {
+      public StringEnumEncodingEntry(Dictionary<string, int> valueDict, string defaultKey,
+                                     int defaultValue, params object[] valuePath) {
+        foreach (KeyValuePair<string, int> entry in valueDict)
+          AddKeyValuePair(entry.Key, entry.Value);
+        DefaultKey = defaultKey;
+        DefaultValue = defaultValue;
+        InterpretValuePath(valuePath);
+      }
+
       // Adds a new key-value pair.
       public void AddKeyValuePair(string key, int value) {
         ValueDict.Add(key, value);
@@ -225,8 +326,8 @@ namespace KIARA {
       }
 
       // Default key and value. Used when there is not value for key and vice versa.
-      public string DefaultKey;
-      public int DefaultValue;
+      public string DefaultKey { get; private set; }
+      public int DefaultValue { get; private set; }
 
       // Synched pair of dictionaries to keep key-value pairs. Private - use metods above to access
       // them.
@@ -236,10 +337,10 @@ namespace KIARA {
 
     private struct RegisteredFunction {
       // Encoding entries for arguments. First entry should always be an index to the argument list.
-      public WireEncodingEntry[] argsEcoding;
+      public WireEncodingEntry[] ArgsEncoding;
 
       // Encoding entries for the result.
-      public WireEncodingEntry[] resultEncoding;
+      public WireEncodingEntry[] ResultEncoding;
 
       // Native function to be executed.
       public Type NativeFunction;
@@ -248,9 +349,17 @@ namespace KIARA {
       public IDLFunctionDecl IDLFunction;
     }
 
-    private Dictionary<string, DataType> DataTypes = new Dictionary<string, DataType>();
+    // Dictionary of all data types.
+    private Dictionary<string, IDLDataType> DataTypes = new Dictionary<string, IDLDataType>();
+
+    // Dictionary of all service declarations.
     private Dictionary<string, IDLServiceDecl> Services = new Dictionary<string, IDLServiceDecl>();
+
+    // Fixed bamespace parsed from the IDL.
     private string Namespace = "";
+
+    // Dictionary of registered functions. Key is full name of the function including the namespace
+    // and service name.
     private Dictionary<string, RegisteredFunction> RegisteredFunctions = 
       new Dictionary<string, RegisteredFunction>();
   }
