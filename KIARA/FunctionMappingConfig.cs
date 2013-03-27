@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace KIARA {
   public class FunctionMappingConfig {
@@ -10,19 +11,22 @@ namespace KIARA {
 
     // Registers a |nativeFuntion| as a handler for the |idlFunction|. |typeMapping| is used
     // to convert arguments.
-    public void RegisterFunction(string idlFunction, Type nativeFunction, string typeMapping) {
+    public void RegisterFunction(string idlFunction, MethodInfo nativeMethod, object nativeObject,
+                                 string typeMapping) {
+      // Find IDL function.
       RegisteredFunction function = new RegisteredFunction();
       function.IDLFunction = GetIDLFunctionByFullName(idlFunction);
 
-      List<WireEncodingEntry> argsEncoding;
-      List<WireEncodingEntry> resultEncoding;
-      ParseTypeMapping(typeMapping, out argsEncoding, out resultEncoding);
-      function.ArgsEncoding = argsEncoding.ToArray();
-      function.ResultEncoding = resultEncoding.ToArray();
+      // Parse type mapping.
+      ParseTypeMapping(typeMapping, out function.ArgsEncoding, out function.ResultEncoding);
 
-      // TODO(rryk): Check correspondence of the parameters.
-      function.NativeFunction = nativeFunction;
+      // Derive corresponding native types.
+      DeriveNativeTypes(function.ArgsEncoding, nativeMethod.GetParameters());
+      DeriveNativeTypes(function.ResultEncoding, nativeMethod.ReturnType);
+      function.NativeMethod = nativeMethod;
+      function.NativeObject = nativeObject;
 
+      // Register function.
       RegisteredFunctions[idlFunction] = function;
     }
 
@@ -32,6 +36,114 @@ namespace KIARA {
         RegisteredFunctions.Remove(idlFunction);
       else
         throw new UnknownIDLFunctionException();
+    }
+
+    // Processes all entries in the |encoding| for a list of |paramTypes|. See
+    // DeriveNativeTypesForEntry for more detail.
+    private void DeriveNativeTypes(List<WireEncodingEntry> encoding, ParameterInfo[] paramTypes) {
+      foreach (WireEncodingEntry entry in encoding) {
+        // First entry must be an index into the parameter list.
+        if (entry.ValuePath[0].GetType() != typeof(IndexEntry))
+          throw new IncompatibleNativeTypeException();
+
+        // Strip parameter index from the value path.
+        IndexEntry paramIndexEntry = (IndexEntry)entry.ValuePath[0];
+        entry.ValuePath.Remove(paramIndexEntry);
+
+        // Derive native types for given parameter.
+        DeriveNativeTypesForEntry(entry, paramTypes[paramIndexEntry.Index].ParameterType);
+
+        // Restore parameter index.
+        entry.ValuePath.Insert(0, paramIndexEntry);
+      }
+    }
+
+    // Processes all entries in |encoding| for a single |returnType|. See DeriveNativeTypesForEntry
+    // for more detail.
+    private void DeriveNativeTypes(List<WireEncodingEntry> encoding, Type returnType) {
+      foreach (WireEncodingEntry entry in encoding)
+        DeriveNativeTypesForEntry(entry, returnType);
+    }
+
+    // Process an |entry|: check if corresponding values can be found in an object with |objectType|
+    // and fill in native types in the encoding.
+    private void DeriveNativeTypesForEntry(WireEncodingEntry entry, Type objectType) {
+      if (entry.GetType() == typeof(BaseEncodingEntry)) {
+        BaseEncodingEntry baseEntry = (BaseEncodingEntry)entry;
+        Type valueType = DeriveNativeTypesForPath(baseEntry.ValuePath, objectType);
+
+        bool isAssignable = false;
+        switch (baseEntry.Encoding) {
+        case WireEncoding.ZCString:
+          isAssignable = typeof(string).IsAssignableFrom(valueType);
+          break;
+        case WireEncoding.U8:
+        case WireEncoding.I8:
+        case WireEncoding.U16:
+        case WireEncoding.I16:
+        case WireEncoding.U32:
+        case WireEncoding.I32:
+          isAssignable = typeof(int).IsAssignableFrom(valueType);
+          break;
+        case WireEncoding.Float:
+        case WireEncoding.Double:
+          isAssignable = typeof(double).IsAssignableFrom(valueType);
+          break;
+        default:
+          throw new InternalException("Unsupported WireEncoding type.");
+        }
+
+        if (!isAssignable)
+          throw new IncompatibleNativeTypeException();
+      } else if (entry.GetType() == typeof(ArrayEncodingEntry)) {
+        ArrayEncodingEntry arrayEntry = (ArrayEncodingEntry)entry;
+        Type valueType = DeriveNativeTypesForPath(arrayEntry.ValuePath, objectType);
+        DeriveNativeTypes(arrayEntry.ElementEncoding, valueType);
+      } else if (entry.GetType() == typeof(StringEnumEncodingEntry)) {
+        throw new NotImplementedException();
+      } else {
+        throw new InternalException("Unsupported WireEncodingEntry type.");
+      }
+    }
+
+    // Returns value type in the |objectType| by followgin the |valuePath|. While traversing the
+    // type hierarchy, fills in native types into the path entries.
+    Type DeriveNativeTypesForPath(List<ValuePathEntry> valuePath, Type objectType) {
+      Type currentNativeType = objectType;
+      foreach (ValuePathEntry entry in valuePath) {
+        // Based on the current entry native type, determine next entry native type.
+        Type nextNativeType;
+        if (entry.GetType() == typeof(IndexEntry)) {
+          if (objectType.IsArray)  // Array
+            nextNativeType = objectType.GetElementType();
+          else if (objectType.GetGenericTypeDefinition() == typeof(List<>))  // List<T>
+            nextNativeType = objectType.GetGenericArguments()[0];
+          else
+            throw new IncompatibleNativeTypeException();
+        } else if (entry.GetType() == typeof(NameEntry)) {
+          string name = ((NameEntry)entry).Name;
+          FieldInfo fieldInfo = objectType.GetField(name, BindingFlags.Public |
+              BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+          PropertyInfo propertyInfo = objectType.GetProperty(name, BindingFlags.Public |
+              BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+          if (fieldInfo != null)  // Named field
+            nextNativeType = fieldInfo.FieldType;
+          else if (propertyInfo != null)  // Named property
+            nextNativeType = propertyInfo.PropertyType;
+          else
+            throw new IncompatibleNativeTypeException();
+        } else {
+          throw new InternalException("Unsupported ValuePathEntry type.");
+        }
+
+        // Fill in native type into the entry. Note that we so after determining that native type is
+        // compatible. Otherwise an exception is thrown and we do not reach this statement.
+        entry.NativeType = currentNativeType;
+        currentNativeType = nextNativeType;
+      }
+
+      // Returns last native types.
+      return currentNativeType;
     }
 
     // Parses type mapping string and constructs |argsEncoding| and |resultEncoding|. Implemented
@@ -221,17 +333,17 @@ namespace KIARA {
     }
 
     // Abstract class that represents an entry in the value path.
-    abstract private class ValuePathEntry {}
+    abstract private class ValuePathEntry {
+      public Type NativeType;
+    }
 
-    // Path entry that represents an index in an array.
+    // Path entry that represents an index in an array or a List<T>.
     private class IndexEntry : ValuePathEntry {
-      public Type ElementType;  // Element type stored in an array. Used to construct array.
       public int Index;
     }
 
-    // Path entry that represents field/property entry in a class/struct.
+    // Path entry that represents a field or property entry in a class or struct.
     private class NameEntry : ValuePathEntry {
-      public Type ObjectType;  // Object/struct type. Used to construct object.
       public string Name;
     }
 
@@ -245,32 +357,28 @@ namespace KIARA {
       U32,
       I32,
       Float,
-      Double,
-      Enum,
-      Boolean
+      Double
     }
 
     abstract private class WireEncodingEntry {
       // Path where the value should be read from or where the value should stored to.
-      public ValuePathEntry[] ValuePath { get; private set; }
+      public List<ValuePathEntry> ValuePath { get; set; }
 
       // Interprets an array of objects in |valuePath| as path to the value. For
       // ints IndexEntry is created, for strings NameEntry is created.
       protected void InterpretValuePath(object[] valuePath) {
-        List<ValuePathEntry> valuePathList = new List<ValuePathEntry>();
+        ValuePath = new List<ValuePathEntry>();
         foreach(object valuePathEntry in valuePath) {
           if (valuePathEntry.GetType() == typeof(int)) {
             IndexEntry entry = new IndexEntry();
             entry.Index = (int)valuePathEntry;
-            valuePathList.Add(entry);
+            ValuePath.Add(entry);
           } else if (valuePathEntry.GetType() == typeof(string)) {
             NameEntry entry = new NameEntry();
             entry.Name = (string)valuePathEntry;
-            valuePathList.Add(entry);
+            ValuePath.Add(entry);
           }
         }
-
-        ValuePath = valuePathList.ToArray();
       }
     }
 
@@ -287,12 +395,12 @@ namespace KIARA {
     private class ArrayEncodingEntry : WireEncodingEntry {
       public ArrayEncodingEntry(List<WireEncodingEntry> elementEncoding,
                                 params object[] valuePath) {
-        ElementEncoding = elementEncoding.ToArray();
+        ElementEncoding = elementEncoding;
         InterpretValuePath(valuePath);
       }
 
       // Nested encoding for each array element. Nested pathes are relative.
-      public WireEncodingEntry[] ElementEncoding { get; private set; }
+      public List<WireEncodingEntry> ElementEncoding { get; private set; }
     }
 
     private class StringEnumEncodingEntry : WireEncodingEntry {
@@ -331,19 +439,22 @@ namespace KIARA {
 
       // Synched pair of dictionaries to keep key-value pairs. Private - use metods above to access
       // them.
-      private Dictionary<string, int> ValueDict;
-      private Dictionary<int, string> KeyDict;
+      private Dictionary<string, int> ValueDict = new Dictionary<string, int>();
+      private Dictionary<int, string> KeyDict = new Dictionary<int, string>();
     }
 
     private struct RegisteredFunction {
       // Encoding entries for arguments. First entry should always be an index to the argument list.
-      public WireEncodingEntry[] ArgsEncoding;
+      public List<WireEncodingEntry> ArgsEncoding;
 
       // Encoding entries for the result.
-      public WireEncodingEntry[] ResultEncoding;
+      public List<WireEncodingEntry> ResultEncoding;
 
-      // Native function to be executed.
-      public Type NativeFunction;
+      // Native method to be executed.
+      public MethodInfo NativeMethod;
+
+      // Native object to be used to execute the NativeMethod.
+      public object NativeObject;
 
       // IDL function declaration.
       public IDLFunctionDecl IDLFunction;
