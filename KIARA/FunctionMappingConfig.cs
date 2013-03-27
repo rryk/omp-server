@@ -10,7 +10,7 @@ namespace KIARA {
     }
 
     // Registers a |nativeFuntion| as a handler for the |idlFunction|. |typeMapping| is used
-    // to convert arguments.
+    // to deserialize parameters and serialize return value.
     public void RegisterFunction(string idlFunction, MethodInfo nativeMethod, object nativeObject,
                                  string typeMapping) {
       // Find IDL function.
@@ -18,11 +18,11 @@ namespace KIARA {
       function.IDLFunction = GetIDLFunctionByFullName(idlFunction);
 
       // Parse type mapping.
-      ParseTypeMapping(typeMapping, out function.ArgsEncoding, out function.ResultEncoding);
+      ParseTypeMapping(typeMapping, out function.ParametersEncoding, out function.ReturnValueEncoding);
 
       // Derive corresponding native types.
-      DeriveNativeTypes(function.ArgsEncoding, nativeMethod.GetParameters());
-      DeriveNativeTypes(function.ResultEncoding, nativeMethod.ReturnType);
+      DeriveNativeTypes(function.ParametersEncoding, nativeMethod.GetParameters());
+      DeriveNativeTypes(function.ReturnValueEncoding, nativeMethod.ReturnType);
       function.NativeMethod = nativeMethod;
       function.NativeObject = nativeObject;
 
@@ -38,13 +38,46 @@ namespace KIARA {
         throw new UnknownIDLFunctionException();
     }
 
+    // Calls registered native function corresponding to the |idlFunction|. Parameters are
+    // deserialized from |request| and return value is serialized into |response|.
+    internal void CallFunction(string idlFunction, byte[] request, out byte[] response) {
+      // Retrieve IDL function declaration. This is only done to trigger UnknownIDLFunctionException
+      // if the specified idlFunction is incorrect.
+      GetIDLFunctionByFullName(idlFunction);
+
+      // Check if native function is registered for the given idlFunction.
+      if (!RegisteredFunctions.ContainsKey(idlFunction))
+        throw new NativeFunctionNotRegisteredException();
+
+      // Deserialize the parameters, execute the function and serialize return value.
+      RegisteredFunction function = RegisteredFunctions[idlFunction];
+      object[] parameters = DeserializeParameters(request, function.ParametersEncoding);
+      object returnValue = function.NativeMethod.Invoke(function.NativeObject, parameters);
+      SerializeReturnValue(returnValue, function.ReturnValueEncoding, out response);
+    }
+
+    // Returns deserialized parameters from the |request| using |parametersEncoding|.
+    object[] DeserializeParameters(byte[] request, List<WireEncodingEntry> parametersEncoding) {
+      // TODO(rryk): Implement.
+      throw new NotImplementedException();
+    }
+
+    // Serializes |returnValue| to |response| using |returnValueEncoding|.
+    void SerializeReturnValue(object returnValue, List<WireEncodingEntry> returnValueEncoding,
+                              out byte[] response) {
+      // TODO(rryk): Implement.
+      throw new NotImplementedException();
+    }
+
     // Processes all entries in the |encoding| for a list of |paramTypes|. See
     // DeriveNativeTypesForEntry for more detail.
     private void DeriveNativeTypes(List<WireEncodingEntry> encoding, ParameterInfo[] paramTypes) {
       foreach (WireEncodingEntry entry in encoding) {
         // First entry must be an index into the parameter list.
-        if (entry.ValuePath[0].GetType() != typeof(IndexEntry))
-          throw new IncompatibleNativeTypeException();
+        if (entry.ValuePath[0].GetType() != typeof(IndexEntry)) {
+          throw new InternalException("Parsed type mapping for parameters does not begin with an " +
+                                      "index entry.");
+        }
 
         // Strip parameter index from the value path.
         IndexEntry paramIndexEntry = (IndexEntry)entry.ValuePath[0];
@@ -122,6 +155,7 @@ namespace KIARA {
             throw new IncompatibleNativeTypeException();
         } else if (entry.GetType() == typeof(NameEntry)) {
           string name = ((NameEntry)entry).Name;
+          // Note that we support reading/writing private, public, static and non-static members.
           FieldInfo fieldInfo = objectType.GetField(name, BindingFlags.Public |
               BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
           PropertyInfo propertyInfo = objectType.GetProperty(name, BindingFlags.Public |
@@ -146,13 +180,14 @@ namespace KIARA {
       return currentNativeType;
     }
 
-    // Parses type mapping string and constructs |argsEncoding| and |resultEncoding|. Implemented
-    // as a hack - uses a dictionary for fixed strings for mapping.
-    private void ParseTypeMapping(string typeMapping, out List<WireEncodingEntry> argsEncoding,
-                                  out List<WireEncodingEntry> resultEncoding) {
+    // Parses type mapping string and constructs |parametersEncoding| and |returnValueEncoding|.
+    // Implemented as a hack - uses a dictionary for fixed strings for mapping.
+    private void ParseTypeMapping(string typeMapping,
+                                  out List<WireEncodingEntry> parametersEncoding,
+                                  out List<WireEncodingEntry> returnValueEncoding) {
       if (typeMapping == "hard-coded-type-mapping-1") {
-        argsEncoding = new List<WireEncodingEntry>();
-        argsEncoding.AddRange(new List<WireEncodingEntry> {
+        parametersEncoding = new List<WireEncodingEntry>();
+        parametersEncoding.AddRange(new List<WireEncodingEntry> {
           new BaseEncodingEntry(WireEncoding.ZCString, 0, "name", "first"),
           new BaseEncodingEntry(WireEncoding.ZCString, 0, "name", "first"),
           new BaseEncodingEntry(WireEncoding.ZCString, 0, "name", "last"),
@@ -170,8 +205,8 @@ namespace KIARA {
           new BaseEncodingEntry(WireEncoding.ZCString, 0, "read_critical"),
           new BaseEncodingEntry(WireEncoding.ZCString, 0, "viewer_digest"),
         });
-        resultEncoding = new List<WireEncodingEntry>();
-        resultEncoding.AddRange(new List<WireEncodingEntry> {
+        returnValueEncoding = new List<WireEncodingEntry>();
+        returnValueEncoding.AddRange(new List<WireEncodingEntry> {
           new BaseEncodingEntry(WireEncoding.ZCString, "name", "first"),
           new BaseEncodingEntry(WireEncoding.ZCString, "name", "last"),
           new BaseEncodingEntry(WireEncoding.ZCString, "login"),
@@ -216,7 +251,7 @@ namespace KIARA {
       return Services[serviceName].Functions[functionName];
     }
 
-    // Adds a namespace prefix to a type name if such type is defined. Otherwise, returns type name 
+    // Adds a namespace prefix to a type name if such type is defined. Otherwise, returns type name
     // unmodified.
     private string AppendNamespaceIfNecessary(string type) {
       string typeWithNamespace = Namespace + "." + type;
@@ -243,13 +278,13 @@ namespace KIARA {
 
     // IDL Function declaration.
     private struct IDLFunctionDecl {
-      public IDLFunctionDecl(string returnType, Dictionary<string, string> arguments) {
+      public IDLFunctionDecl(string returnType, Dictionary<string, string> parameters) {
         ReturnType = returnType;
-        Arguments = arguments;
+        Parameters = parameters;
       }
 
       public string ReturnType;
-      public Dictionary<string, string> Arguments;
+      public Dictionary<string, string> Parameters;
     }
 
     // IDL Service declaration.
@@ -259,9 +294,9 @@ namespace KIARA {
       public Dictionary<string, IDLFunctionDecl> Functions;
     }
 
-    // Adds a service with |name| using |protocol| at |url|. |functions| is a map from the 
+    // Adds a service with |name| using |protocol| at |url|. |functions| is a map from the
     // function name to its declaration.
-    private void AddService(string name, string protocol, string uri, 
+    private void AddService(string name, string protocol, string uri,
                     Dictionary<string, IDLFunctionDecl> functions) {
       IDLServiceDecl service;
       service.Protocol = protocol;
@@ -276,7 +311,7 @@ namespace KIARA {
       if (idlURI == "http://localhost/home/kiara/login.idl") {
         Namespace = "opensim";
         AddStructType("FullName", new Dictionary<string, string> {
-          {"first", "string"}, 
+          {"first", "string"},
           {"last", "string"}
         });
         AddStructType("LoginRequest", new Dictionary<string, string> {
@@ -316,7 +351,7 @@ namespace KIARA {
           {"agent_access", "AccessType"},
           {"session_id", "string"},
         });
-        AddService("login", "WebSocket", "ws://localhost:9000/kiara/login", 
+        AddService("login", "WebSocket", "ws://localhost:9000/kiara/login",
                    new Dictionary<string, IDLFunctionDecl> {
           {"login_to_simulator", new IDLFunctionDecl("LoginResponse", new Dictionary<string, string>{
               {"request", "LoginRequest"}
@@ -444,11 +479,12 @@ namespace KIARA {
     }
 
     private struct RegisteredFunction {
-      // Encoding entries for arguments. First entry should always be an index to the argument list.
-      public List<WireEncodingEntry> ArgsEncoding;
+      // Encoding entries for parameters. First entry should always be an index to the parameter
+      // list.
+      public List<WireEncodingEntry> ParametersEncoding;
 
-      // Encoding entries for the result.
-      public List<WireEncodingEntry> ResultEncoding;
+      // Encoding entries for the return value.
+      public List<WireEncodingEntry> ReturnValueEncoding;
 
       // Native method to be executed.
       public MethodInfo NativeMethod;
@@ -471,7 +507,7 @@ namespace KIARA {
 
     // Dictionary of registered functions. Key is full name of the function including the namespace
     // and service name.
-    private Dictionary<string, RegisteredFunction> RegisteredFunctions = 
+    private Dictionary<string, RegisteredFunction> RegisteredFunctions =
       new Dictionary<string, RegisteredFunction>();
   }
 }
