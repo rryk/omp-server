@@ -18,7 +18,8 @@ namespace KIARA {
       function.IDLFunction = GetIDLFunctionByFullName(idlFunction);
 
       // Parse type mapping.
-      ParseTypeMapping(typeMapping, out function.ParametersEncoding, out function.ReturnValueEncoding);
+      ParseTypeMapping(typeMapping, out function.ParametersEncoding,
+                       out function.ReturnValueEncoding);
 
       // Derive corresponding native types.
       DeriveNativeTypes(function.ParametersEncoding, nativeMethod.GetParameters());
@@ -105,10 +106,11 @@ namespace KIARA {
         BaseEncodingEntry baseEntry = (BaseEncodingEntry)entry;
         Type valueType = DeriveNativeTypesForPath(baseEntry.ValuePath, objectType);
 
-        bool isAssignable = false;
+        // Check type compatibility.
         switch (baseEntry.Encoding) {
         case WireEncoding.ZCString:
-          isAssignable = typeof(string).IsAssignableFrom(valueType);
+          if (!typeof(string).IsAssignableFrom(valueType))
+            throw new IncompatibleNativeTypeException();
           break;
         case WireEncoding.U8:
         case WireEncoding.I8:
@@ -116,24 +118,31 @@ namespace KIARA {
         case WireEncoding.I16:
         case WireEncoding.U32:
         case WireEncoding.I32:
-          isAssignable = typeof(int).IsAssignableFrom(valueType);
+          if (!typeof(int).IsAssignableFrom(valueType))
+            throw new IncompatibleNativeTypeException();
           break;
         case WireEncoding.Float:
         case WireEncoding.Double:
-          isAssignable = typeof(double).IsAssignableFrom(valueType);
+          if (!typeof(double).IsAssignableFrom(valueType))
+            throw new IncompatibleNativeTypeException();
           break;
         default:
           throw new InternalException("Unsupported WireEncoding type.");
         }
-
-        if (!isAssignable)
-          throw new IncompatibleNativeTypeException();
       } else if (entry.GetType() == typeof(ArrayEncodingEntry)) {
         ArrayEncodingEntry arrayEntry = (ArrayEncodingEntry)entry;
         Type valueType = DeriveNativeTypesForPath(arrayEntry.ValuePath, objectType);
+
+        // Process element encoding recursively.
         DeriveNativeTypes(arrayEntry.ElementEncoding, valueType);
       } else if (entry.GetType() == typeof(StringEnumEncodingEntry)) {
-        throw new NotImplementedException();
+        StringEnumEncodingEntry stringEnumEntry = (StringEnumEncodingEntry)entry;
+        Type enumValueType = DeriveNativeTypesForPath(entry.ValuePath, objectType);
+
+        // Check type compatibility. Enums may be represented with a string or int.
+        if (!typeof(int).IsAssignableFrom(enumValueType) &&
+            !typeof(string).IsAssignableFrom(enumValueType))
+          throw new IncompatibleNativeTypeException();
       } else {
         throw new InternalException("Unsupported WireEncodingEntry type.");
       }
@@ -353,10 +362,12 @@ namespace KIARA {
         });
         AddService("login", "WebSocket", "ws://localhost:9000/kiara/login",
                    new Dictionary<string, IDLFunctionDecl> {
-          {"login_to_simulator", new IDLFunctionDecl("LoginResponse", new Dictionary<string, string>{
+          {"login_to_simulator",
+            new IDLFunctionDecl("LoginResponse", new Dictionary<string, string>{
               {"request", "LoginRequest"}
             })},
-          {"set_login_level", new IDLFunctionDecl("boolean", new Dictionary<string, string>{
+          {"set_login_level",
+            new IDLFunctionDecl("boolean", new Dictionary<string, string>{
               {"name", "FullName"},
               {"password", "string"},
               {"level", "i32"},
@@ -472,8 +483,7 @@ namespace KIARA {
       public string DefaultKey { get; private set; }
       public int DefaultValue { get; private set; }
 
-      // Synched pair of dictionaries to keep key-value pairs. Private - use metods above to access
-      // them.
+      // Synched pair of dictionaries to keep key-value pairs. Use public metods to access them.
       private Dictionary<string, int> ValueDict = new Dictionary<string, int>();
       private Dictionary<int, string> KeyDict = new Dictionary<int, string>();
     }
