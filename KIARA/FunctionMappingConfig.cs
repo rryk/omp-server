@@ -58,28 +58,63 @@ namespace KIARA {
     }
 
     // Returns deserialized parameters from the |request| using |parametersEncoding|.
-    object[] DeserializeParameters(byte[] request, List<WireEncodingEntry> parametersEncoding) {
-      // TODO(rryk): Implement.
+    private object[] DeserializeParameters(byte[] request,
+                                           List<WireEncodingEntry> parametersEncoding) {
+      SerializedDataReader reader = new SerializedDataReader(request);
+
+      int numParameters = ValidateParametersEncoding(parametersEncoding);
+      object[] parameters = new object[numParameters];
+
+      // TODO(rryk): Reading and constructing objects at the same time require very complex
+      // implemention. An idea for simpler implementation: process all value paths in each encoding
+      // entry and create a structure that describes the objects, arrays and other types that need
+      // to be created. Then create them and only then start decoding the wire protocol. This allows
+      // to avoid resizing fixed-length arrays. They will not be created until we know their size
+      // (after processing all value paths). Dynamic arrays such as ones whose size is coded on the
+      // wire, will be created during the decoding stage and we'll know their size too.
+
+      // TODO(rryk): Should we allow skipping array indicies when entring value paths? What value
+      // should we fill these arrays with instead?
+      //   Yes. We will create values using default constructor.
+      // TODO(rryk): Should we allow skipping parameters? What should we pass instead?
+      //   Yes. We will create parameters using default constructor.
+
       throw new NotImplementedException();
     }
 
     // Serializes |returnValue| to |response| using |returnValueEncoding|.
-    void SerializeReturnValue(object returnValue, List<WireEncodingEntry> returnValueEncoding,
-                              out byte[] response) {
+    private void SerializeReturnValue(object returnValue,
+                                      List<WireEncodingEntry> returnValueEncoding,
+                                      out byte[] response) {
       // TODO(rryk): Implement.
       throw new NotImplementedException();
     }
 
-    // Processes all entries in the |encoding| for a list of |paramTypes|. See
-    // DeriveNativeTypesForEntry for more detail.
-    private void DeriveNativeTypes(List<WireEncodingEntry> encoding, ParameterInfo[] paramTypes) {
-      foreach (WireEncodingEntry entry in encoding) {
-        // First entry must be an index into the parameter list.
+    // Validates an encoding for the parameters. Value path in each entry should begin with an
+    // IndexEntry. Returns the number of parameters.
+    int ValidateParametersEncoding(List<WireEncodingEntry> parametersEncoding) {
+      // Collect param indicies.
+      int maxParamIndex = -1;
+      foreach (WireEncodingEntry entry in parametersEncoding) {
+        // Value path in each entry should start with an IndexEntry.
         if (entry.ValuePath[0].GetType() != typeof(IndexEntry)) {
           throw new InternalException("Parsed type mapping for parameters does not begin with an " +
                                       "index entry.");
         }
 
+        int paramIndex = ((IndexEntry)entry.ValuePath[0]).Index;
+        maxParamIndex = maxParamIndex > paramIndex ? paramIndex : maxParamIndex;
+      }
+
+      return maxParamIndex + 1;
+    }
+
+    // Processes all entries in the |encoding| for a list of |paramTypes|. See
+    // DeriveNativeTypesForEntry for more detail.
+    private void DeriveNativeTypes(List<WireEncodingEntry> encoding, ParameterInfo[] paramTypes) {
+      ValidateParametersEncoding(encoding);
+
+      foreach (WireEncodingEntry entry in encoding) {
         // Strip parameter index from the value path.
         IndexEntry paramIndexEntry = (IndexEntry)entry.ValuePath[0];
         entry.ValuePath.Remove(paramIndexEntry);
