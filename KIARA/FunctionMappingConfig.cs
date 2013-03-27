@@ -171,7 +171,6 @@ namespace KIARA {
         // Process element encoding recursively.
         DeriveNativeTypes(arrayEntry.ElementEncoding, valueType);
       } else if (entry.GetType() == typeof(StringEnumEncodingEntry)) {
-        StringEnumEncodingEntry stringEnumEntry = (StringEnumEncodingEntry)entry;
         Type enumValueType = DeriveNativeTypesForPath(entry.ValuePath, objectType);
 
         // Check type compatibility. Enums may be represented with a string or int.
