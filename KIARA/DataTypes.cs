@@ -4,9 +4,9 @@ using System.Collections.Generic;
 namespace KIARA {
   public class IDLDataType {
     static public bool IsBaseType(string typeName) {
-      return typeName == "boolean" || typeName == "i8" || typeName == "u8" || typeName == "i16" || 
-        typeName == "u16" || typeName == "i32" || typeName == "u32" || typeName == "i64" || 
-        typeName == "u64" || typeName == "float" || typeName == "double" || 
+      return typeName == "boolean" || typeName == "i8" || typeName == "u8" || typeName == "i16" ||
+        typeName == "u16" || typeName == "i32" || typeName == "u32" || typeName == "i64" ||
+        typeName == "u64" || typeName == "float" || typeName == "double" ||
         typeName == "string" || typeName == "void";
     }
   }
