@@ -112,6 +112,7 @@ namespace KIARA
           CreateBaseEncoding(BaseEncoding.ZCString, "channel"),
           CreateBaseEncoding(BaseEncoding.ZCString, "version"),
           CreateBaseEncoding(BaseEncoding.ZCString, "platform"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "mac"),
           CreateArrayEncoding(new List<WireEncoding> {
             CreateBaseEncoding(BaseEncoding.ZCString)
           }, "options"),
