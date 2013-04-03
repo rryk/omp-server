@@ -38,7 +38,7 @@ namespace KIARA
           IList array = ObjectConstructor.ConstructAndAllocateArray(arrayType, size);
           for (int i = 0; i < size; i++)
             array[i] = Read(reader, ObjectAccessor.GetElementType(arrayType), encodingEntry.ElementEncoding);
-          obj = array;
+          ObjectAccessor.SetValueAtPath(ref obj, encodingEntry.ValuePath, array);
         }
         else if (encodingEntry.Kind == WireEncoding.WireEncodingKind.Enum)
         {
