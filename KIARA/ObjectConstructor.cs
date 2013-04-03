@@ -39,6 +39,7 @@ namespace KIARA
       public enum SketchKind
       {
         Undefined,
+        Base,
         Array,
         Object
       }
@@ -56,6 +57,7 @@ namespace KIARA
       {
         Sketch currentSketch = sketch;
         Type currentType = objectType;
+        currentSketch.Type = currentType;
         foreach (PathEntry pathEntry in encodingEntry.ValuePath)
         {
           if (currentSketch.Kind != Sketch.SketchKind.Undefined)
@@ -68,12 +70,16 @@ namespace KIARA
           else
           {
             if (pathEntry.Kind == PathEntry.PathEntryKind.Index)
+            {
               currentSketch.Kind = Sketch.SketchKind.Array;
+              currentSketch.Elements = new Dictionary<int, Sketch>();
+            }
             else if (pathEntry.Kind == PathEntry.PathEntryKind.Name)
+            {
               currentSketch.Kind = Sketch.SketchKind.Object;
+              currentSketch.Fields = new Dictionary<string, Sketch>();
+            }
           }
-
-          currentSketch.Type = currentType;
 
           if (currentSketch.Kind == Sketch.SketchKind.Array)
           {
@@ -82,17 +88,24 @@ namespace KIARA
             currentType = ObjectAccessor.GetElementType(currentType);
             if (currentType == null)  
               throw new IncompatibleNativeTypeException();
-            currentSketch = currentSketch.Elements[pathEntry.Index] = new Sketch();
+            if (!currentSketch.Elements.ContainsKey(pathEntry.Index))
+              currentSketch.Elements[pathEntry.Index] = new Sketch();
+            currentSketch = currentSketch.Elements[pathEntry.Index];
           }
           else if (currentSketch.Kind == Sketch.SketchKind.Object)
           {
             currentType = ObjectAccessor.GetFieldOrPropertyType(currentType, pathEntry.Name);
             if (currentType == null)
               throw new IncompatibleNativeTypeException();
-            currentSketch = currentSketch.Fields[pathEntry.Name] = new Sketch();
+            if (!currentSketch.Fields.ContainsKey(pathEntry.Name))
+              currentSketch.Fields[pathEntry.Name] = new Sketch();
+            currentSketch = currentSketch.Fields[pathEntry.Name];
           }
-          
+
+          currentSketch.Type = currentType;
         }
+        
+        currentSketch.Kind = Sketch.SketchKind.Base;
       }
       return sketch;
     }
@@ -115,6 +128,8 @@ namespace KIARA
         foreach (KeyValuePair<string, Sketch> element in sketch.Fields)
           ObjectAccessor.SetFieldOrPropertyValue(obj, element.Key, ConstructFromSketch(element.Value));
       }
+      else if (sketch.Kind == Sketch.SketchKind.Base)
+        obj = ConstructObject(sketch.Type);
 
       return obj;
     }

@@ -105,20 +105,20 @@ namespace KIARA
       {
         functionWireEncoding.ParamEncoding[0] = new List<WireEncoding>();
         functionWireEncoding.ParamEncoding[0].AddRange(new List<WireEncoding> {
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "name", "first"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "name", "last"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "pwdHash"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "start"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "channel"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "version"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "platform"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "name", "first"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "name", "last"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "pwdHash"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "start"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "channel"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "version"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "platform"),
           CreateArrayEncoding(new List<WireEncoding> {
             CreateBaseEncoding(BaseEncoding.ZCString)
-          }, 0, "options"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "id0"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "agree_to_tos"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "read_critical"),
-          CreateBaseEncoding(BaseEncoding.ZCString, 0, "viewer_digest")
+          }, "options"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "id0"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "agree_to_tos"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "read_critical"),
+          CreateBaseEncoding(BaseEncoding.ZCString, "viewer_digest")
         });
 
         functionWireEncoding.ReturnValueEncoding.AddRange(new List<WireEncoding> {
@@ -205,6 +205,7 @@ namespace KIARA
           entry.Kind = PathEntry.PathEntryKind.Name;
           entry.Name = (string)argument;
         }
+        valuePath.Add(entry);
       }
         
       return valuePath;

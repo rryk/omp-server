@@ -19,14 +19,14 @@ namespace KIARA
 
       object container = obj;
       for (int i = 0; i < path.Count - 1; i++)
-        container = ObjectAccessor.GetMember(obj, path[i]);
-      ObjectAccessor.SetMember(container, path[path.Count - 1], value);
+        container = GetMember(container, path[i]);
+      SetMember(container, path[path.Count - 1], value);
     }
 
     static public object GetValueAtPath(object obj, List<PathEntry> path)
     {
       for (int i = 0; i < path.Count - 1; i++)
-        obj = ObjectAccessor.GetMember(obj, path[i]);
+        obj = GetMember(obj, path[i]);
       return obj;
     }
 
@@ -103,3 +103,4 @@ namespace KIARA
     #endregion
   }
 }
+
