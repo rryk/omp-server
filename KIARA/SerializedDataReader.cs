@@ -3,15 +3,17 @@ using System.Text;
 
 namespace KIARA {
   public class SerializedDataReader {
-    private byte[] rawData;
-    private int offset;
+    internal byte[] rawData;
+    internal int offset;
 
-    public SerializedDataReader(byte[] aRawData) {
+    internal SerializedDataReader(byte[] aRawData)
+    {
       rawData = aRawData;
       offset = 0;
     }
 
-    public string ReadZCString() {
+    internal string ReadZCString()
+    {
       StringBuilder builder = new StringBuilder();
       char c = BitConverter.ToChar(rawData, offset);
       while (c != '\0') {
@@ -23,7 +25,8 @@ namespace KIARA {
       return builder.ToString();
     }
 
-    public UInt32 ReadUint32() {
+    internal UInt32 ReadUint32()
+    {
       UInt32 value = BitConverter.ToUInt32(rawData, offset);
       offset += 4;
       return value;

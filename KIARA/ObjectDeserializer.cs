@@ -10,7 +10,7 @@ namespace KIARA
   {
     #region Public interface
 
-    public static object Read(SerializedDataReader reader, Type objectType, List<WireEncoding> encoding)
+    static internal object Read(SerializedDataReader reader, Type objectType, List<WireEncoding> encoding)
     {
       object obj = ObjectConstructor.ConstructObject(encoding, objectType);
       foreach (WireEncoding encodingEntry in encoding)

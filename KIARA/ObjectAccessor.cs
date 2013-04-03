@@ -12,7 +12,7 @@ namespace KIARA
     #region Public interface
 
     // Supports empty path in which case modifies passed obj as it's passed by reference.
-    static public void SetValueAtPath(ref object obj, List<PathEntry> path, object value)
+    static internal void SetValueAtPath(ref object obj, List<PathEntry> path, object value)
     {
       if (path.Count == 0)
       {
@@ -49,21 +49,21 @@ namespace KIARA
       }
     }
 
-    static public object GetValueAtPath(object obj, List<PathEntry> path)
+    static internal object GetValueAtPath(object obj, List<PathEntry> path)
     {
       for (int i = 0; i < path.Count; i++)
         obj = GetMember(obj, path[i]);
       return obj;
     }
 
-    static public Type GetTypeAtPath(object obj, List<PathEntry> path)
+    static internal Type GetTypeAtPath(object obj, List<PathEntry> path)
     {
       for (int i = 0; i < path.Count - 1; i++)
         obj = GetMember(obj, path[i]);
       return GetMemberType(obj, path[path.Count - 1]);
     }
 
-    static public Type GetElementType(Type currentType)
+    static internal Type GetElementType(Type currentType)
     {
       if (!typeof(IList).IsAssignableFrom(currentType))
         throw new IncompatibleNativeTypeException();
@@ -74,7 +74,7 @@ namespace KIARA
       return null;
     }
 
-    static public object GetMember(object obj, PathEntry member) 
+    static internal object GetMember(object obj, PathEntry member) 
     {
       if (member.Kind == PathEntry.PathEntryKind.Index)
         return ((IList)obj)[member.Index];
@@ -82,7 +82,7 @@ namespace KIARA
         return GetFieldOrPropertyValue(obj, member.Name);
     }
 
-    static public Type GetMemberType(object obj, PathEntry member)
+    static internal Type GetMemberType(object obj, PathEntry member)
     {
       if (member.Kind == PathEntry.PathEntryKind.Index)
         return GetElementType(obj.GetType());
@@ -90,7 +90,7 @@ namespace KIARA
         return GetFieldOrPropertyType(obj.GetType(), member.Name);
     }
 
-    static public void SetMember(object obj, PathEntry member, object value)
+    static internal void SetMember(object obj, PathEntry member, object value)
     {
       if (member.Kind == PathEntry.PathEntryKind.Index)
         ((IList)obj)[member.Index] = value;
@@ -98,7 +98,7 @@ namespace KIARA
         SetFieldOrPropertyValue(obj, member.Name, value);
     }
 
-    static public object GetFieldOrPropertyValue(object obj, string name)
+    static internal object GetFieldOrPropertyValue(object obj, string name)
     {
       FieldInfo fieldInfo = obj.GetType().GetField(name, BindingFlags.Public |
         BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
@@ -111,7 +111,7 @@ namespace KIARA
       throw new IncompatibleNativeTypeException();
     }
 
-    static public void SetFieldOrPropertyValue(object obj, string name, object value)
+    static internal void SetFieldOrPropertyValue(object obj, string name, object value)
     {
       FieldInfo fieldInfo = obj.GetType().GetField(name, BindingFlags.Public |
         BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
@@ -123,7 +123,7 @@ namespace KIARA
         propertyInfo.SetValue(obj, value, null);
     }
 
-    public static Type GetFieldOrPropertyType(Type type, string name)
+    static internal Type GetFieldOrPropertyType(Type type, string name)
     {
       FieldInfo fieldInfo = type.GetField(name, BindingFlags.Public |
         BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);

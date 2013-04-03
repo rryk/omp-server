@@ -11,13 +11,13 @@ namespace KIARA
   {
     #region Public interface
 
-    static public object ConstructObject(List<WireEncoding> encoding, Type objectType)
+    static internal object ConstructObject(List<WireEncoding> encoding, Type objectType)
     {
       Sketch sketch = ConstructSketch(encoding, objectType);
       return ConstructFromSketch(sketch);
     }
 
-    public static IList ConstructAndAllocateArray(Type arrayType, int size)
+    static internal IList ConstructAndAllocateArray(Type arrayType, int size)
     {
       if (!typeof(IList).IsAssignableFrom(arrayType))
         throw new IncompatibleNativeTypeException();
@@ -36,21 +36,21 @@ namespace KIARA
 
     class Sketch
     {
-      public enum SketchKind
+      internal enum SketchKind
       {
         Undefined,
         Base,
         Array,
         Object
       }
-      public SketchKind Kind = SketchKind.Undefined;
-      public Type Type;
-      public int Size = 0;                       // for Kind == Array
-      public Dictionary<int, Sketch> Elements;   // for Kind == Array
-      public Dictionary<string, Sketch> Fields;  // for Kind == Object
+      internal SketchKind Kind = SketchKind.Undefined;
+      internal Type Type;
+      internal int Size = 0;                       // for Kind == Array
+      internal Dictionary<int, Sketch> Elements;   // for Kind == Array
+      internal Dictionary<string, Sketch> Fields;  // for Kind == Object
     }
 
-    static Sketch ConstructSketch(List<WireEncoding> encoding, Type objectType)
+    static private Sketch ConstructSketch(List<WireEncoding> encoding, Type objectType)
     {
       Sketch sketch = new Sketch();
       foreach (WireEncoding encodingEntry in encoding)
@@ -110,7 +110,7 @@ namespace KIARA
       return sketch;
     }
 
-    static object ConstructFromSketch(Sketch sketch)
+    static private object ConstructFromSketch(Sketch sketch)
     {
       object obj = null;
       if (sketch.Kind == Sketch.SketchKind.Array)
@@ -134,7 +134,7 @@ namespace KIARA
       return obj;
     }
 
-    private static object ConstructObject(Type type, params object[] constructorParams)
+    static private object ConstructObject(Type type, params object[] constructorParams)
     {
       if (type == typeof(string))
         return null;  // Strings do not have default constructor.

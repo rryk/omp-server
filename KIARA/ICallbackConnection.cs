@@ -22,7 +22,7 @@ namespace KIARA {
 
   class CallbackConnectionClientHandler : IClientHandlerImpl
   {
-    public CallbackConnectionClientHandler(ICallbackConnection connection)
+    internal CallbackConnectionClientHandler(ICallbackConnection connection)
     {
       Connection = connection;
       connection.OnDataMessage += HandleData;

@@ -7,14 +7,14 @@ namespace KIARA
 {
   class PathEntry
   {
-    public enum PathEntryKind
+    internal enum PathEntryKind
     {
       Index,
       Name
     }
-    public PathEntryKind Kind;
-    public int Index;   // Kind == Index
-    public string Name;  // Kind == Name
+    internal PathEntryKind Kind;
+    internal int Index;   // Kind == Index
+    internal string Name;  // Kind == Name
   }
 
   enum BaseEncoding
@@ -32,45 +32,45 @@ namespace KIARA
 
   class WireEncoding
   {
-    public enum WireEncodingKind
+    internal enum WireEncodingKind
     {
       Base,
       Array,
       Enum
     }
 
-    public WireEncodingKind Kind;
-    public List<PathEntry> ValuePath;
+    internal WireEncodingKind Kind;
+    internal List<PathEntry> ValuePath;
 
     #region Kind == Base
-    public BaseEncoding BaseEncoding;
+    internal BaseEncoding BaseEncoding;
     #endregion
 
     #region Kind == Array
-    public List<WireEncoding> ElementEncoding;
+    internal List<WireEncoding> ElementEncoding;
     #endregion
 
     #region Kind == Enum
-    public string DefaultKey;
-    public int DefaultValue;
+    internal string DefaultKey;
+    internal int DefaultValue;
 
     // Adds a new key-value pair.
-    public void AddKeyValuePair(string key, int value)
+    internal void AddKeyValuePair(string key, int value)
     {
       ValueDict.Add(key, value);
       KeyDict.Add(value, key);
     }
 
     // Returns a value given a key.
-    public int ValueByKey(string key)
+    internal int ValueByKey(string key)
     {
-      if (ValueDict.ContainsKey(key))
+      if (key != null && ValueDict.ContainsKey(key))
         return ValueDict[key];
       return DefaultValue;
     }
 
     // Returns a key given a value.
-    public string KeyByValue(int value)
+    internal string KeyByValue(int value)
     {
       if (KeyDict.ContainsKey(value))
         return KeyDict[value];
@@ -88,15 +88,15 @@ namespace KIARA
 
   class FunctionWireEncoding
   {
-    public Dictionary<int, List<WireEncoding>> ParamEncoding = new Dictionary<int,List<WireEncoding>>();
-    public List<WireEncoding> ReturnValueEncoding = new List<WireEncoding>();
-    public FunctionMapping.RegisteredFunction RegisteredFunction;
+    internal Dictionary<int, List<WireEncoding>> ParamEncoding = new Dictionary<int, List<WireEncoding>>();
+    internal List<WireEncoding> ReturnValueEncoding = new List<WireEncoding>();
+    internal FunctionMapping.RegisteredFunction RegisteredFunction;
   }
 
   class ProtocolGenerator
   {
     #region Public interface
-    static public FunctionWireEncoding GenerateEncoding(FunctionMapping.RegisteredFunction function)
+    static internal FunctionWireEncoding GenerateEncoding(FunctionMapping.RegisteredFunction function)
     {
       FunctionWireEncoding functionWireEncoding = new FunctionWireEncoding();
       functionWireEncoding.RegisteredFunction = function;
@@ -154,7 +154,7 @@ namespace KIARA
       return functionWireEncoding;
     }
 
-    private static WireEncoding CreateEnumEncoding(string defaultKey, int defaultValue,
+    static private WireEncoding CreateEnumEncoding(string defaultKey, int defaultValue,
       Dictionary<string, int> valueDict, params object[] path)
     {
       WireEncoding wireEncoding = new WireEncoding();
@@ -169,7 +169,7 @@ namespace KIARA
       return wireEncoding;
     }
 
-    private static WireEncoding CreateArrayEncoding(List<WireEncoding> nestedEncoding, params object[] path)
+    static private WireEncoding CreateArrayEncoding(List<WireEncoding> nestedEncoding, params object[] path)
     {
       WireEncoding wireEncoding = new WireEncoding();
       wireEncoding.Kind = WireEncoding.WireEncodingKind.Array;
@@ -179,7 +179,7 @@ namespace KIARA
       return wireEncoding;
     }
 
-    private static WireEncoding CreateBaseEncoding(BaseEncoding baseEncoding, params object[] path)
+    static private WireEncoding CreateBaseEncoding(BaseEncoding baseEncoding, params object[] path)
     {
       WireEncoding wireEncoding = new WireEncoding();
       wireEncoding.Kind = WireEncoding.WireEncodingKind.Base;
@@ -189,7 +189,7 @@ namespace KIARA
       return wireEncoding;
     }
 
-    private static List<PathEntry> CreateValuePath(object[] arguments)
+    static private List<PathEntry> CreateValuePath(object[] arguments)
     {
       List<PathEntry> valuePath = new List<PathEntry>();
       

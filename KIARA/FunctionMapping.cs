@@ -8,6 +8,13 @@ namespace KIARA {
   {
     #region Public interface
 
+    public FunctionMapping()
+    {
+      DataTypes = new Dictionary<string, IDLDataType>();
+      Services = new Dictionary<string, IDLService>();
+      Functions = new Dictionary<string, RegisteredFunction>();
+    }
+
     public void LoadIDL(string idlURI)
     {
       if (idlURI == "http://localhost/home/kiara/login.idl")
@@ -86,13 +93,6 @@ namespace KIARA {
     #endregion
 
     #region Private implementation
-
-    public FunctionMapping()
-    {
-      DataTypes = new Dictionary<string, IDLDataType>();
-      Services = new Dictionary<string, IDLService>();
-      Functions = new Dictionary<string, RegisteredFunction>();
-    }
 
     internal enum IDLDataTypeKind
     {

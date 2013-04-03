@@ -5,7 +5,8 @@ namespace KIARA {
   public class SerializedDataWriter {
     private List<byte> Data = new List<byte>();
 
-    public void WriteZCString(string value) {
+    internal void WriteZCString(string value)
+    {
       // Represent null strings as empty.
       if (value == null)
       {
@@ -21,19 +22,23 @@ namespace KIARA {
       WriteUint16(0);
     }
 
-    public void WriteUint32(UInt32 value) {
+    internal void WriteUint32(UInt32 value)
+    {
       Data.AddRange(BitConverter.GetBytes(value));
     }
 
-    public void WriteUint16(UInt16 value) {
+    internal void WriteUint16(UInt16 value)
+    {
       Data.AddRange(BitConverter.GetBytes(value));
     }
 
-    public void WriteInt32(Int32 value) {
+    internal void WriteInt32(Int32 value)
+    {
       Data.AddRange(BitConverter.GetBytes(value));
     }
 
-    public byte[] ToByteArray() {
+    internal byte[] ToByteArray()
+    {
       return Data.ToArray();
     }
   }
