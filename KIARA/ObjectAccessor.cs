@@ -15,7 +15,10 @@ namespace KIARA
     static public void SetValueAtPath(ref object obj, List<PathEntry> path, object value)
     {
       if (path.Count == 0)
+      {
         obj = value;
+        return;
+      }
 
       object container = obj;
       for (int i = 0; i < path.Count - 1; i++)
