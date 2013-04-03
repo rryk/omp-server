@@ -25,14 +25,16 @@ namespace KIARA
 
     static public object GetValueAtPath(object obj, List<PathEntry> path)
     {
-      for (int i = 0; i < path.Count - 1; i++)
+      for (int i = 0; i < path.Count; i++)
         obj = GetMember(obj, path[i]);
       return obj;
     }
 
     static public Type GetTypeAtPath(object obj, List<PathEntry> path)
     {
-      return GetValueAtPath(obj, path).GetType();
+      for (int i = 0; i < path.Count - 1; i++)
+        obj = GetMember(obj, path[i]);
+      return GetMemberType(obj, path[path.Count - 1]);
     }
 
     static public Type GetElementType(Type currentType)
@@ -52,6 +54,14 @@ namespace KIARA
         return ((IList)obj)[member.Index];
       else
         return GetFieldOrPropertyValue(obj, member.Name);
+    }
+
+    static public Type GetMemberType(object obj, PathEntry member)
+    {
+      if (member.Kind == PathEntry.PathEntryKind.Index)
+        return GetElementType(obj.GetType());
+      else
+        return GetFieldOrPropertyType(obj.GetType(), member.Name);
     }
 
     static public void SetMember(object obj, PathEntry member, object value)
