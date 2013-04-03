@@ -8,47 +8,50 @@ namespace KIARA.Test
   class FunctionMapingConfigTest
   {
     struct FullName {
-      string first;
-      string last;
+      public string first;
+      public string last;
     }
 
     struct LoginRequest {
-      FullName name;
+      public FullName name;
       string pwdHash;
       string start;
       string channel;
       string version;
       string platform;
-      string mac;
-      string[] options;
-      string id0;
-      string agree_to_tos;
-      string read_critical;
-      string viewer_digest;
+      public string mac;
+      public string[] options;
+      public string id0;
+      public string agree_to_tos;
+      public string read_critical;
+      public string viewer_digest;
     }
 
     struct LoginResponse {
-      FullName name;
-      string login;
-      string sim_ip;
-      string start_location;
-      long seconds_since_epoch;
-      string message;
-      int circuit_code;
-      int sim_port;
-      string secure_session_id;
-      string look_at;
-      string agent_id;
-      string inventory_host;
-      int region_x, region_y;
-      string seed_capability;
-      string agent_access;
-      string session_id;
+      public FullName name;
+      public string login;
+      public string sim_ip;
+      public string start_location;
+      public long seconds_since_epoch;
+      public string message;
+      public int circuit_code;
+      public int sim_port;
+      public string secure_session_id;
+      public string look_at;
+      public string agent_id;
+      public string inventory_host;
+      public int region_x, region_y;
+      public string seed_capability;
+      public string agent_access;
+      public string session_id;
     }
 
     class LoginHandler {
       public LoginResponse login(LoginRequest request) {
-        return new LoginResponse();
+        LoginResponse response = new LoginResponse();
+        response.name = request.name;
+        response.message = "Hello, Avatar!";
+        return response;
       }
     }
 
