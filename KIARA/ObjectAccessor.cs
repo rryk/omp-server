@@ -20,10 +20,33 @@ namespace KIARA
         return;
       }
 
+      // List of value types (structs) to be reassigned.
+      List<KeyValuePair<object, PathEntry>> valueTypeContainers = new List<KeyValuePair<object,PathEntry>>();
+
       object container = obj;
       for (int i = 0; i < path.Count - 1; i++)
-        container = GetMember(container, path[i]);
+      {
+        object newContainer = GetMember(container, path[i]);
+
+        // Keep the trail of the value types (struct) or clear it if next container is non-value type.
+        if (newContainer.GetType().IsValueType)
+          valueTypeContainers.Add(new KeyValuePair<object, PathEntry>(container, path[i]));
+        else
+          valueTypeContainers.Clear();
+
+        container = newContainer;
+      }
+
       SetMember(container, path[path.Count - 1], value);
+
+      // Reassign the value types (structs).
+      for (int i = valueTypeContainers.Count - 1; i >= 0; i--)
+      {
+        object valueContainer = valueTypeContainers[i].Key;
+        PathEntry pathEntry = valueTypeContainers[i].Value;
+        SetMember(valueContainer, pathEntry, container);
+        container = valueContainer;
+      }
     }
 
     static public object GetValueAtPath(object obj, List<PathEntry> path)
