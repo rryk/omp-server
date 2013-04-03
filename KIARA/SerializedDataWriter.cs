@@ -6,6 +6,13 @@ namespace KIARA {
     private List<byte> Data = new List<byte>();
 
     public void WriteZCString(string value) {
+      // Represent null strings as empty.
+      if (value == null)
+      {
+        WriteUint16(0);
+        return;
+      }
+
       // Write characters.
       for (int i = 0; i < value.Length; i++)
         WriteUint16(value[i]);
