@@ -137,7 +137,9 @@ namespace KIARA
     private static object ConstructObject(Type type, params object[] constructorParams)
     {
       if (type == typeof(string))
-        return "";
+        return null;  // Strings do not have default constructor.
+      else if (type.IsArray && constructorParams.Length != 1)
+        return null;  // Only construct fixed arrays if size is passed.
       else
         return Activator.CreateInstance(type, constructorParams);
     }
