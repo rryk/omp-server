@@ -45,6 +45,7 @@ using Nini.Config;
 using log4net;
 
 using KIARA;
+using System.Collections.Generic;
 
 namespace OpenSim.Server.Handlers.Login
 {
@@ -54,6 +55,8 @@ namespace OpenSim.Server.Handlers.Login
 
         private ILoginService m_LocalService;
         private bool m_Proxy;
+
+        private List<ClientHandler> m_ClientHandlers = new List<ClientHandler>();
 
         public LLLoginHandlers(ILoginService service, bool hasProxy)
         {
@@ -183,72 +186,136 @@ namespace OpenSim.Server.Handlers.Login
 
         }
 
-        public void HandleKIARALogin(string servicepath, WebSocketHttpServerHandler handler)
+        struct WSFullName {
+          public string first;
+          public string last;
+        }
+
+        struct WSLoginRequest {
+          public WSFullName name;
+          public string pwdHash;
+          public string start;
+          public string channel;
+          public string version;
+          public string platform;
+          public string mac;
+          public string[] options;
+          public string id0;
+          public string agree_to_tos;
+          public string read_critical;
+          public string viewer_digest;
+        }
+
+        struct WSLoginResponse {
+          public WSFullName name;
+          public string login;
+          public string sim_ip;
+          public string start_location;
+          public long seconds_since_epoch;
+          public string message;
+          public int circuit_code;
+          public int sim_port;
+          public string secure_session_id;
+          public string look_at;
+          public string agent_id;
+          public string inventory_host;
+          public int region_x, region_y;
+          public string seed_capability;
+          public string agent_access;
+          public string session_id;
+        }
+
+        WSLoginResponse HandleKIARALogin(WSLoginRequest requestStruct, IPEndPoint endpoint) {
+            // Convert login request into OSD.
+            OSDMap request = new OSDMap();
+            request["first"] = OSD.FromString(requestStruct.name.first);
+            request["last"] = OSD.FromString(requestStruct.name.last);
+            request["passwd"] = OSD.FromString(requestStruct.pwdHash);
+            request["start"] = OSD.FromString(requestStruct.start);
+            request["channel"] = OSD.FromString(requestStruct.channel);
+            request["version"] = OSD.FromString(requestStruct.version);
+            request["platform"] = OSD.FromString(requestStruct.platform);
+            request["mac"] = OSD.FromString(requestStruct.mac);
+
+            OSDArray options = new OSDArray(requestStruct.options.Length);
+            foreach (string option in requestStruct.options)
+                options.Add (OSD.FromString(option));
+            request["options"] = options;
+
+            request["id0"] = OSD.FromString(requestStruct.id0);
+            request["agree_to_tos"] = OSD.FromString(requestStruct.agree_to_tos);
+            request["read_critical"] = OSD.FromString(requestStruct.read_critical);
+            request["viewer_digest"] = OSD.FromString(requestStruct.viewer_digest);
+
+            // Execute login using LLSD login.
+            OSDMap response = (OSDMap)HandleLLSDLogin(request, endpoint);
+
+            // Convert login response from OSD.
+            WSLoginResponse responseStruct = new WSLoginResponse();
+            responseStruct.name.first = response["first_name"].AsString();
+            responseStruct.name.last = response["last_name"].AsString();
+            responseStruct.login = response["login"].AsString();
+            responseStruct.sim_ip = response["sim_ip"].AsString();
+            responseStruct.start_location = response["start_location"].AsString();
+            responseStruct.seconds_since_epoch = response["seconds_since_epoch"].AsUInteger();
+            responseStruct.message = response["message"].AsString();
+            responseStruct.circuit_code = response["circuit_code"].AsInteger();
+            responseStruct.sim_port = (UInt16)response["sim_port"].AsUInteger();
+            responseStruct.secure_session_id = response["secure_session_id"].AsString();
+            responseStruct.look_at = response["look_at"].AsString();
+            responseStruct.agent_id = response["agent_id"].AsString();
+            responseStruct.inventory_host = response["inventory_host"].AsString();
+            responseStruct.region_y = response["region_y"].AsInteger();
+            responseStruct.region_x = response["region_x"].AsInteger();
+            responseStruct.seed_capability = response["seed_capability"].AsString();
+            responseStruct.agent_access = response["agent_access"].AsString();
+            responseStruct.session_id = response["session_id"].AsString();
+
+            return responseStruct;
+        }
+
+        class WSCallbackConnection : ICallbackConnection {
+            public event DataMessageHandler OnDataMessage;
+
+            public WSCallbackConnection(WebSocketHttpServerHandler handler) {
+                m_Handler = handler;
+            }
+
+            public bool Send(byte[] data) {
+                m_Handler.SendData(data);
+                return true;
+            }
+
+            public void Listen() {
+              m_Handler.OnData += (sender, data) => OnDataMessage(data.Data);
+              m_Handler.HandshakeAndUpgrade();
+            }
+
+            public bool IsReliable() {
+                return true;
+            }
+
+            private WebSocketHttpServerHandler m_Handler;
+        }
+
+        public delegate TReturn FFunc<TArg,TReturn>(TArg arg);
+
+        public void HandleWSLogin(string servicepath, WebSocketHttpServerHandler handler)
         {
-            handler.OnData += delegate(object sender, WebsocketDataEventArgs rawData) {
-                // Read method name and UID of the call.
-                SerializedDataReader reader = new SerializedDataReader(rawData.Data);
-                uint uid = reader.ReadUint32();
-                string methodName = reader.ReadZCString();
+            WSCallbackConnection connection = new WSCallbackConnection(handler);
+            ClientHandler clientHandler = new ClientHandler(connection);
 
-                // Write UID of the call into response.
-                SerializedDataWriter writer = new SerializedDataWriter();
-                writer.WriteUint32(uid);
+            FunctionMapping functionMapping = new FunctionMapping();
+            functionMapping.LoadIDL("http://localhost/home/kiara/login.idl");
+            functionMapping.RegisterFunction(
+                "opensim.login.login_to_simulator",
+                (FFunc<WSLoginRequest, WSLoginResponse>)(delegate(WSLoginRequest request) {
+                  return HandleKIARALogin(request, handler.RemoteIPEndpoint);
+                }),
+                "hard-coded-1");
 
-                if (methodName.Equals("opensim.login.login_to_simulator")) {
-                    // Convert login request into OSD.
-                    OSDMap request = new OSDMap();
-                    request["first"] = OSD.FromString(reader.ReadZCString());
-                    request["last"] = OSD.FromString(reader.ReadZCString());
-                    request["passwd"] = OSD.FromString(reader.ReadZCString());
-                    request["start"] = OSD.FromString(reader.ReadZCString());
-                    request["channel"] = OSD.FromString(reader.ReadZCString());
-                    request["version"] = OSD.FromString(reader.ReadZCString());
-                    request["platform"] = OSD.FromString(reader.ReadZCString());
-                    request["mac"] = OSD.FromString(reader.ReadZCString());
-
-                    UInt32 numOptions = reader.ReadUint32();
-                    OSDArray options = new OSDArray((int)numOptions);
-                    for (int i = 0; i < numOptions; i++)
-                        options.Add (OSD.FromString(reader.ReadZCString()));
-                    request["options"] = options;
-
-                    request["id0"] = OSD.FromString(reader.ReadZCString());
-                    request["agree_to_tos"] = OSD.FromString(reader.ReadZCString());
-                    request["read_critical"] = OSD.FromString(reader.ReadZCString());
-                    request["viewer_digest"] = OSD.FromString(reader.ReadZCString());
-
-                    // Execute login using LLSD login.
-                    OSDMap response = (OSDMap)HandleLLSDLogin(request, handler.RemoteIPEndpoint);
-
-                    // Convert login response from OSD.
-                    writer.WriteZCString(response["first_name"].AsString());
-                    writer.WriteZCString(response["last_name"].AsString());
-                    writer.WriteZCString(response["login"].AsString());
-                    writer.WriteZCString(response["sim_ip"].AsString());
-                    writer.WriteZCString(response["start_location"].AsString());
-                    writer.WriteUint32(response["seconds_since_epoch"].AsUInteger());
-                    writer.WriteZCString(response["message"].AsString());
-                    writer.WriteUint32(response["circuit_code"].AsUInteger());
-                    writer.WriteUint16((UInt16)response["sim_port"].AsUInteger());
-                    writer.WriteZCString(response["secure_session_id"].AsString());
-                    writer.WriteZCString(response["look_at"].AsString());
-                    writer.WriteZCString(response["agent_id"].AsString());
-                    writer.WriteZCString(response["inventory_host"].AsString());
-                    writer.WriteInt32(response["region_y"].AsInteger());
-                    writer.WriteInt32(response["region_x"].AsInteger());
-                    writer.WriteZCString(response["seed_capability"].AsString());
-                    writer.WriteUint32(response["agent_access"].AsString() == "Mature" ? 0u : 1u);
-                    writer.WriteZCString(response["session_id"].AsString());
-                }
-
-                // Send response.
-                handler.SendData(writer.ToByteArray());
-
-                m_log.InfoFormat("[LOGIN]: Method {0} with uid {1} called.", methodName, uid);
-            };
-
-            handler.HandshakeAndUpgrade();
+            clientHandler.Listen(functionMapping);
+            m_ClientHandlers.Add(clientHandler);
         }
 
         public OSD HandleLLSDLogin(OSD request, IPEndPoint remoteClient)

@@ -71,7 +71,7 @@ namespace KIARA {
       }
     }
 
-    public void RegisterFunction(string idlFunction, MethodInfo nativeMethod, object nativeObject, string typeMapping)
+    public void RegisterFunction(string idlFunction, Delegate d, string typeMapping)
     {
       string serviceName, functionName;
       SplitIDLFunctionName(idlFunction, out serviceName, out functionName);
@@ -79,8 +79,7 @@ namespace KIARA {
         throw new UnknownIDLFunctionException();
 
       RegisteredFunction registeredFunction = new RegisteredFunction();
-      registeredFunction.NativeMethod = nativeMethod;
-      registeredFunction.NativeObject = nativeObject;
+      registeredFunction.Delegate = d;
       registeredFunction.TypeMapping = typeMapping;
       Functions[idlFunction] = registeredFunction;
     }
@@ -131,8 +130,7 @@ namespace KIARA {
 
     internal class RegisteredFunction
     {
-      public object NativeObject;
-      public MethodInfo NativeMethod;
+      public Delegate Delegate;
       public string TypeMapping;
     }
 

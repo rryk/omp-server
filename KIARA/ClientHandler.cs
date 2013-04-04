@@ -6,12 +6,12 @@ namespace KIARA {
   public interface IClientHandlerImpl
   {
     // Starts listening to the client stream and executes respective calls.
-    void ProcessClientCalls(FunctionMapping mapping);
+    void Listen(FunctionMapping mapping);
   }
 
   public partial class ClientHandler {
-    public void ProcessClientCalls(FunctionMapping mapping) {
-      Implementation.ProcessClientCalls(mapping);
+    public void Listen(FunctionMapping mapping) {
+      Implementation.Listen(mapping);
     }
 
     // This must be set in the constructor.

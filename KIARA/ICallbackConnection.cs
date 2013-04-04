@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace KIARA {
   public delegate void DataMessageHandler(byte[] data);
@@ -8,6 +9,7 @@ namespace KIARA {
     event DataMessageHandler OnDataMessage;
     bool Send(byte[] message);
     bool IsReliable();
+    void Listen();
   }
 
   public partial class ClientHandler
@@ -25,14 +27,14 @@ namespace KIARA {
     internal CallbackConnectionClientHandler(ICallbackConnection connection)
     {
       Connection = connection;
-      connection.OnDataMessage += HandleData;
     }
 
-    public void ProcessClientCalls(FunctionMapping mapping)
+    public void Listen(FunctionMapping mapping)
     {
-      WireEncodings = new Dictionary<string, FunctionWireEncoding>();
       foreach (KeyValuePair<string, FunctionMapping.RegisteredFunction> function in mapping.Functions) 
         WireEncodings[function.Key] = ProtocolGenerator.GenerateEncoding(function.Value);
+      Connection.OnDataMessage += HandleData;
+      Connection.Listen();
     }
 
     private void HandleData(byte[] data)
@@ -51,17 +53,17 @@ namespace KIARA {
         FunctionWireEncoding encoding = WireEncodings[functionName];
         List<object> paramValues = new List<object>();
         foreach (KeyValuePair<int, List<WireEncoding>> paramEncoding in encoding.ParamEncoding) {
-          Type paramType = encoding.RegisteredFunction.NativeMethod.GetParameters()[paramEncoding.Key].ParameterType;
+          ParameterInfo[] parametersInfo = encoding.RegisteredFunction.Delegate.Method.GetParameters();
+          Type paramType = parametersInfo[paramEncoding.Key].ParameterType;
           object paramValue = ObjectDeserializer.Read(reader, paramType, paramEncoding.Value);
           paramValues.Add(paramValue);
         }
         
         // Invoke native function.
-        object returnValue = encoding.RegisteredFunction.NativeMethod.Invoke(
-          encoding.RegisteredFunction.NativeObject, paramValues.ToArray());
+        object returnValue = encoding.RegisteredFunction.Delegate.DynamicInvoke(paramValues.ToArray());
 
         // Write return value.
-        ObjectSerializer.Write(writer, returnValue, encoding.RegisteredFunction.NativeMethod.ReturnType, 
+        ObjectSerializer.Write(writer, returnValue, encoding.RegisteredFunction.Delegate.Method.ReflectedType, 
           encoding.ReturnValueEncoding);
       }
 
@@ -69,7 +71,7 @@ namespace KIARA {
     }
 
     private ICallbackConnection Connection;
-    private Dictionary<string, FunctionWireEncoding> WireEncodings;
+    private Dictionary<string, FunctionWireEncoding> WireEncodings = new Dictionary<string, FunctionWireEncoding>();
   }
 
   #endregion
