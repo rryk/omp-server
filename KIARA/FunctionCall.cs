@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using Newtonsoft.Json.Linq;
 
@@ -51,14 +50,22 @@ namespace KIARA
     #region Private implementation
     private static object CastJObject(object obj, Type destType)
     {
-      if (obj.GetType() == destType)
+      if (obj.GetType() == destType)                      // types match
         return obj;
-      else if (destType == typeof(JObject))
+      else if (destType.IsAssignableFrom(obj.GetType()))  // implicit cast will do the job
+        return obj;
+      else if (destType == typeof(JObject))               // got actual type, but need JObject
         return new JObject(obj);
-      else if (obj.GetType() == typeof(JObject))
+      else if (obj.GetType() == typeof(JObject))          // got JObject, but need actual type
         return ((JObject)obj).ToObject(destType);
+      // Special cases
+      else if (obj.GetType() == typeof(long) && destType == typeof(int))      // long -> int
+        return Convert.ToInt32((long)obj);
+      else if (obj.GetType() == typeof(double) && destType == typeof(float))  // double -> float
+        return (float)(double)obj;
       else
-        throw new Error(ErrorCode.INVALID_TYPE, "Cannot convert " + obj.GetType().Name + " to " + destType.Name);
+        throw new Error(ErrorCode.INVALID_TYPE,
+                                "Cannot convert " + obj.GetType().Name + " to " + destType.Name);
     }
 
     internal void SetResult(string eventName, object argument)

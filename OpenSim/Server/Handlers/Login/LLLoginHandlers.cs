@@ -284,15 +284,15 @@ namespace OpenSim.Server.Handlers.Login
                 m_Handler = handler;
             }
 
-            public bool Send(byte[] data)
+            public bool Send(string data)
             {
-              m_Handler.SendData(data);
+              m_Handler.SendMessage(data);
               return true;
             }
 
             public void Listen()
             {
-              m_Handler.OnText += (sender, data) => OnMessage(data.Data);
+              m_Handler.OnText += (sender, text) => OnMessage(text.Data);
               m_Handler.OnClose += (sender, data) => OnCloseOrError("Connected closed.");
               m_Handler.OnUpgradeFailed += (sender, data) => OnCloseOrError("Upgrade failed.");
               m_Handler.HandshakeAndUpgrade();
@@ -308,18 +308,25 @@ namespace OpenSim.Server.Handlers.Login
         {
           Connection connection = new Connection(new WSConnectionWrapper(handler));
 
-          FuncWrapper foobar = connection.GenerateFuncWrapper("opensim.login.foobar", "...");
+          FuncWrapper foobar = connection.GenerateFuncWrapper(
+            "opensim.login.foobar",
+            "Request.a : Args[0]; Request.b : Args[1]; Response : Result;");
 
           connection.RegisterFuncImplementation(
-            "opensim.login.login", "...",
+            "opensim.login.login",
+            "Request.request : Args[0]; Response : Result;",
             (LoginDelegate)delegate(WSLoginRequest request)
             {
-              foobar().On("result", (FooBarResultDelegate)delegate(Exception exception, int result) {
-                if (exception != null)
-                  m_log.Info("Received exception from foobar.", exception);
-                else
-                  m_log.Info("Received answer from foobar - " + result);
-              });
+              FunctionCall foobarCall = foobar(3.14, request.name);
+              foobarCall.On(
+                "result",
+                (FooBarResultDelegate)delegate(Exception exception, int result) {
+                  if (exception != null)
+                    m_log.Info("Received exception from foobar.", exception);
+                  else
+                    m_log.Info("Received answer from foobar - " + result);
+                }
+              );
               return HandleKIARALogin(request, handler.RemoteIPEndpoint);
             });
 

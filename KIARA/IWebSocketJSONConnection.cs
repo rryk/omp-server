@@ -53,7 +53,7 @@ namespace KIARA {
         callMessage.Add("call");
         callMessage.Add(callID);
         callMessage.Add(qualifiedMethodName);
-        callMessage.AddRange(defaultHandlers);
+        callMessage.AddRange(parameters);
         Connection.Send(JsonConvert.SerializeObject(callMessage));
 
         FunctionCall wrapper = new FunctionCall();
@@ -85,7 +85,7 @@ namespace KIARA {
       string msgType = (string)data[0];
       if (msgType == "call-reply")
       {
-        int callID = (int)data[1];
+        int callID = Convert.ToInt32(data[1]);
         if (ActiveCalls.ContainsKey(callID))
         {
           bool success = (bool)data[2];
@@ -99,7 +99,7 @@ namespace KIARA {
       }
       else if (msgType == "call")
       {
-        int callID = (int)data[1];
+        int callID = Convert.ToInt32(data[1]);
         string methodName = (string)data[2];
         if (RegisteredFunctions.ContainsKey(methodName))
         {

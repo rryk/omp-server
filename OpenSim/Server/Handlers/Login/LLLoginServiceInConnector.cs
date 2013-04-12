@@ -93,7 +93,7 @@ namespace OpenSim.Server.Handlers.Login
             server.AddXmlRPCHandler("login_to_simulator", loginHandlers.HandleXMLRPCLogin, false);
             server.AddXmlRPCHandler("set_login_level", loginHandlers.HandleXMLRPCSetLoginLevel, false);
             server.SetDefaultLLSDHandler(loginHandlers.HandleLLSDLogin);
-            server.AddWebSocketHandler("/kiara/login", loginHandlers.HandleWSLogin);
+            server.AddWebSocketHandler("/ws-json/login", loginHandlers.HandleWSLogin);
         }
     }
 }
