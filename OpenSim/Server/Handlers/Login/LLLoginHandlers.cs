@@ -56,7 +56,7 @@ namespace OpenSim.Server.Handlers.Login
         private ILoginService m_LocalService;
         private bool m_Proxy;
 
-        private List<ClientHandler> m_ClientHandlers = new List<ClientHandler>();
+        private List<Connection> m_Connections = new List<Connection>();
 
         public LLLoginHandlers(ILoginService service, bool hasProxy)
         {
@@ -274,48 +274,56 @@ namespace OpenSim.Server.Handlers.Login
             return responseStruct;
         }
 
-        class WSCallbackConnection : ICallbackConnection {
-            public event DataMessageHandler OnDataMessage;
+        class WSConnectionWrapper : IWebSocketJSONConnection {
+            public event MessageDelegate OnMessage;
 
-            public WSCallbackConnection(WebSocketHttpServerHandler handler) {
+            public event CloseOrErrorDelegate OnCloseOrError;
+
+            public WSConnectionWrapper(WebSocketHttpServerHandler handler)
+            {
                 m_Handler = handler;
             }
 
-            public bool Send(byte[] data) {
-                m_Handler.SendData(data);
-                return true;
+            public bool Send(byte[] data)
+            {
+              m_Handler.SendData(data);
+              return true;
             }
 
-            public void Listen() {
-              m_Handler.OnData += (sender, data) => OnDataMessage(data.Data);
+            public void Listen()
+            {
+              m_Handler.OnText += (sender, data) => OnMessage(data.Data);
+              m_Handler.OnClose += (sender, data) => OnCloseOrError("Connected closed.");
+              m_Handler.OnUpgradeFailed += (sender, data) => OnCloseOrError("Upgrade failed.");
               m_Handler.HandshakeAndUpgrade();
-            }
-
-            public bool IsReliable() {
-                return true;
             }
 
             private WebSocketHttpServerHandler m_Handler;
         }
 
-        public delegate TReturn FFunc<TArg,TReturn>(TArg arg);
+        delegate WSLoginResponse LoginDelegate(WSLoginRequest request);
+        delegate void FooBarResultDelegate(Exception exception, int result);
 
         public void HandleWSLogin(string servicepath, WebSocketHttpServerHandler handler)
         {
-            WSCallbackConnection connection = new WSCallbackConnection(handler);
-            ClientHandler clientHandler = new ClientHandler(connection);
+          Connection connection = new Connection(new WSConnectionWrapper(handler));
 
-            FunctionMapping functionMapping = new FunctionMapping();
-            functionMapping.LoadIDL("http://localhost/home/kiara/login.idl");
-            functionMapping.RegisterFunction(
-                "opensim.login.login_to_simulator",
-                (FFunc<WSLoginRequest, WSLoginResponse>)(delegate(WSLoginRequest request) {
-                  return HandleKIARALogin(request, handler.RemoteIPEndpoint);
-                }),
-                "hard-coded-1");
+          FuncWrapper foobar = connection.GenerateFuncWrapper("opensim.login.foobar", "...");
 
-            clientHandler.Listen(functionMapping);
-            m_ClientHandlers.Add(clientHandler);
+          connection.RegisterFuncImplementation(
+            "opensim.login.login", "...",
+            (LoginDelegate)delegate(WSLoginRequest request)
+            {
+              foobar().On("result", (FooBarResultDelegate)delegate(Exception exception, int result) {
+                if (exception != null)
+                  m_log.Info("Received exception from foobar.", exception);
+                else
+                  m_log.Info("Received answer from foobar - " + result);
+              });
+              return HandleKIARALogin(request, handler.RemoteIPEndpoint);
+            });
+
+          m_Connections.Add(connection);
         }
 
         public OSD HandleLLSDLogin(OSD request, IPEndPoint remoteClient)

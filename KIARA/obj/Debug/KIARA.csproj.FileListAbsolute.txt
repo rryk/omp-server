@@ -1,0 +1,5 @@
+D:\Projects\opensim-omp\KIARA\obj\Debug\ResolveAssemblyReference.cache
+D:\Projects\opensim-omp\KIARA\obj\Debug\KIARA.dll
+D:\Projects\opensim-omp\KIARA\obj\Debug\KIARA.pdb
+D:\Projects\opensim-omp\bin\KIARA.dll
+D:\Projects\opensim-omp\bin\KIARA.pdb
