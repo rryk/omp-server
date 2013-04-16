@@ -302,33 +302,19 @@ namespace OpenSim.Server.Handlers.Login
         }
 
         delegate WSLoginResponse LoginDelegate(WSLoginRequest request);
-        delegate void FooBarResultDelegate(Exception exception, int result);
 
         public void HandleWSLogin(string servicepath, WebSocketHttpServerHandler handler)
         {
           Connection connection = new Connection(new WSConnectionWrapper(handler));
-
-          FunctionWrapper foobar = connection.GenerateFunctionWrapper(
-            "opensim.login.foobar",
-            "Request.a : Args[0]; Request.b : Args[1]; Response : Result;");
+          connection.LoadIDL("http://localhost/home/kiara/idl/login.idl");
 
           connection.RegisterFuncImplementation(
-            "opensim.login.login",
+            "omp.login.login",
             "Request.request : Args[0]; Response : Result;",
-            (LoginDelegate)delegate(WSLoginRequest request)
-            {
-              FunctionCall foobarCall = foobar(3.14, request.name);
-              foobarCall.On(
-                "result",
-                (FooBarResultDelegate)delegate(Exception exception, int result) {
-                  if (exception != null)
-                    m_log.Info("Received exception from foobar.", exception);
-                  else
-                    m_log.Info("Received answer from foobar - " + result);
-                }
-              );
+            (LoginDelegate) delegate(WSLoginRequest request) {
               return HandleKIARALogin(request, handler.RemoteIPEndpoint);
-            });
+            }
+          );
 
           m_Connections.Add(connection);
         }

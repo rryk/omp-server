@@ -73,10 +73,10 @@ namespace KIARA {
                 FunctionCall wrapper = new FunctionCall();
                 foreach (Delegate handler in defaultHandlers) 
                 {
-                    if (handler.GetType() == typeof(CallResultDelegate))
+                    if (handler.GetType() == typeof(CallErrorCallback))
+                        wrapper.OnError += (CallErrorCallback)handler;
+                    else
                         wrapper.OnResult.Add(handler);
-                    else if (handler.GetType() == typeof(CallErrorDelegate))
-                        wrapper.OnError += (CallErrorDelegate)handler;
                 }
 
                 ActiveCalls.Add(callID, wrapper);
@@ -86,15 +86,19 @@ namespace KIARA {
 
         private bool IsOneWay(string qualifiedMethodName)
         {
-            return qualifiedMethodName == "opensim.connect.handshake";
+            return qualifiedMethodName == "omp.connect.handshake";
         }
 
         private void ValidateDefaultHandlers(object[] defaultHandlers)
         {
             foreach (object handler in defaultHandlers)
             {
-                if (handler.GetType() != typeof(CallResultDelegate) && 
-                    handler.GetType() != typeof(ConnectionErrorDelegate))
+                if (handler.GetType() != typeof(CallResultCallback) &&
+                    handler.GetType() != typeof(CallErrorCallback) &&
+                    // Generic call result delegate.
+                    !(handler.GetType().IsSubclassOf(typeof(Delegate)) &&
+                      ((Delegate)handler).Method.GetParameters().Length == 2 &&
+                      ((Delegate)handler).Method.ReturnType == typeof(void)))
                 {
                     throw new Error(ErrorCode.INVALID_ARGUMENT,
                                     "Invalid default handler type: " + handler.GetType().Name);
@@ -155,19 +159,21 @@ namespace KIARA {
                         success = false;
                     }
 
-                    // Send call-reply message.
-                    List<object> callReplyMessage = new List<object>();
-                    callReplyMessage.Add("call-reply");
-                    callReplyMessage.Add(callID);
-                    callReplyMessage.Add(success);
+                    if (!IsOneWay(methodName))
+                    {
+                        // Send call-reply message.
+                        List<object> callReplyMessage = new List<object>();
+                        callReplyMessage.Add("call-reply");
+                        callReplyMessage.Add(callID);
+                        callReplyMessage.Add(success);
 
-                    if (!success)
-                        callReplyMessage.Add(exception);
-                    else if (nativeMethod.Method.ReturnType != typeof(void))
-                        callReplyMessage.Add(returnValue);
+                        if (!success)
+                            callReplyMessage.Add(exception);
+                        else if (nativeMethod.Method.ReturnType != typeof(void))
+                            callReplyMessage.Add(returnValue);
 
-
-                    Connection.Send(JsonConvert.SerializeObject(callReplyMessage));
+                        Connection.Send(JsonConvert.SerializeObject(callReplyMessage));
+                    }
                 }
                 else
                 {

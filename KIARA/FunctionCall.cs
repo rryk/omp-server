@@ -10,10 +10,10 @@ namespace KIARA
   // Result handler. Result can be either an |exception| or a |returnValue| from the function. Only one of them
   // will be non-null. You may also specify your own delegate type - it must have two parameters and return void.
   // KIARA will try to convert exception and returnValue to desired types automatically.
-  public delegate void CallResultDelegate(JObject exception, JObject returnValue);
+  public delegate void CallResultCallback(JObject exception, JObject returnValue);
   
   // Error handler. It is executed when a connection error has happened and function execution status is unknown.
-  public delegate void CallErrorDelegate(string reason);
+  public delegate void CallErrorCallback(string reason);
 
   public class FunctionCall
   {
@@ -33,12 +33,12 @@ namespace KIARA
       }
       else if (eventName == "error")
       {
-        if (handler.GetType() != typeof(CallErrorDelegate))
+        if (handler.GetType() != typeof(CallErrorCallback))
         {
           throw new Error(ErrorCode.INVALID_ARGUMENT,
             "Invalid handler type for error event: " + handler.GetType().Name);
         }
-        OnError += (CallErrorDelegate)handler;
+        OnError += (CallErrorCallback)handler;
       }
       else
       {
@@ -102,7 +102,7 @@ namespace KIARA
     }
 
     internal List<Delegate> OnResult = new List<Delegate>();
-    internal event CallErrorDelegate OnError;
+    internal event CallErrorCallback OnError;
     #endregion
   }
 }
