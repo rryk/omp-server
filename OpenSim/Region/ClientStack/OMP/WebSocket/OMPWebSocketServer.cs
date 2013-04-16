@@ -60,7 +60,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         public void AddScene(IScene scene)
         {
             if (m_Scene != null)
-                m_log.Error("AddScene called on OMPWebSocketServer that already has a scene.");
+                m_Log.Error("AddScene called on OMPWebSocketServer that already has a scene.");
 
             m_Scene = scene;
             m_Location = new Location(scene.RegionInfo.RegionHandle);
@@ -78,7 +78,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public void Stop()
         {
-            m_log.Info("Stop");
+            m_Log.Info("Stop");
         }
         #endregion
 
@@ -88,26 +88,8 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 //        private AgentCircuitManager m_CircuitManager = null;
 //        private IConfigSource m_ConfigSource = null;
         private BaseHttpServer m_HttpServer = null;
-        private static readonly ILog m_log = 
+        private static readonly ILog m_Log = 
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-
-        private class Client {
-            public Connection Connection = null;
-            public Dictionary<string, FunctionWrapper> Functions = 
-                new Dictionary<string, FunctionWrapper>();
-
-            public FunctionCall Call(string name, params object[] parameters)
-            {
-                if (Functions.ContainsKey(name)) {
-                    return Functions[name](parameters);
-                } else {
-                    m_log.Error("An attempt to call an unregistered function " + name);
-                    return new FunctionCall(); // TODO(rryk): Fixme.
-                }
-            }
-        }
-
-        private List<Client> m_Clients = new List<Client>();
 
         private class WSConnectionWrapper : IWebSocketJSONConnection {
             public event ConnectionMessageDelegate OnMessage;
@@ -136,85 +118,11 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             private WebSocketHttpServerHandler m_Handler;
         }
 
-        /*
-         * namespace opensim;
-         * 
-         * service interface {
-         *   bool implements(string interfaceURI);
-         * }
-         * 
-         */
-
-        delegate void ConfigureInterfacesCallback(Client client);
-        delegate void ImplementsResultCallback(Exception exception, bool result);
-        delegate void ImplementsErrorCallback(string reason);
-
-        private void ConfigureInterfaces(Connection conn, ConfigureInterfacesCallback callback)
-        {
-            Client client = new Client();
-            client.Connection = conn;
-
-            string[] requiredInterfaces = { "http://www.opensim-omp.com/idl/connect.idl" };
-            string[] functions =  { "opensim.connect.handshake" };
-
-            int numInterfaces = requiredInterfaces.Length;
-            int loadedInterfaces =  0;
-            bool failedToLoad = false;
-
-            ImplementsErrorCallback errorCallback = delegate(string reason) {
-                failedToLoad = true;
-                m_log.Error("Failed to load all required interfaces - " + reason);
-            };
-
-            // TODO(rryk): Not sure if this may be called in parallel - perhaps we need a mutex.
-            ImplementsResultCallback resultCallback = delegate(Exception exception, bool result) {
-                if (failedToLoad)
-                    return;
-
-                if (exception != null)
-                {
-                    errorCallback("exception returned by client");
-                    return;
-                }
-
-                if (result) 
-                {
-                    loadedInterfaces += 1;
-                    if (loadedInterfaces == numInterfaces) {
-                        foreach (string func in functions)
-                            client.Functions[func] = conn.GenerateFunctionWrapper(func, "...");
-                        callback(client);
-                    }
-                } 
-                else
-                    errorCallback("not supported by client");
-            };
-
-            FunctionWrapper implements = conn.GenerateFunctionWrapper(
-                "opensim.interface.implements", "...", errorCallback, resultCallback);
-            foreach (string interfaceName in requiredInterfaces)
-                implements(interfaceName);
-        }
-
-        delegate void ImplementsInterfaceCallback(Exception exception, bool result);
-
         private void HandleNewClient(string servicepath, WebSocketHttpServerHandler handler) {
             Connection conn = new Connection(new WSConnectionWrapper(handler));
-            conn.LoadIDL("http://www.opensim-omp.com/idl/interface.idl");
-            ConfigureInterfaces(conn, delegate(Client client) {
-                m_Clients.Add(client);
-                // TODO(rryk): Implement proper handshake.
-                client.Call("opensim.connect.handshake", 42);
-            });
+            conn.LoadIDL("http://localhost/home/kiara/idl/interface.idl");
+            new OMPWebSocketClient(this, conn);
         }
-
-        #region Connect interface
-        private delegate void HandshakeReplyDelegate(RegionHandshakeReplyPacket packet);
-
-        private void HandleHandshakeReply(Connection conn, RegionHandshakeReplyPacket packet) {
-            m_log.Info("Received RegionHandshakeReply message");
-        }
-        #endregion
 
         #endregion
     }
