@@ -69,6 +69,8 @@
 
       <ReferencePath>../bin/</ReferencePath>
       <Reference name="System"/>
+      <Reference name="System.Core"/>
+      <Reference name="Newtonsoft.Json" path="../bin/"/>
       <Files>
         <Match pattern="*.cs" recurse="false"/>
       </Files>
@@ -1483,6 +1485,36 @@
         <Match pattern="*.cs" recurse="true">
           <Exclude name="Tests" pattern="Tests"/>
         </Match>
+      </Files>
+    </Project>
+    
+    <Project frameworkVersion="v3_5" name="OpenSim.Region.ClientStack.OMP.WebSocket" path="OpenSim/Region/ClientStack/OMP/WebSocket" type="Library">
+      <Configuration name="Debug">
+        <Options>
+          <OutputPath>../../../../../bin/</OutputPath>
+        </Options>
+      </Configuration>
+      <Configuration name="Release">
+        <Options>
+          <OutputPath>../../../../../bin/</OutputPath>
+        </Options>
+      </Configuration>
+
+      <ReferencePath>../../../../../bin/</ReferencePath>
+      <Reference name="System"/>
+      <Reference name="KIARA"/>
+      <Reference name="OpenSim.Framework" path="../../../../../bin/"/>
+      <Reference name="OpenSim.Framework.Servers"/>
+      <Reference name="OpenSim.Framework.Servers.HttpServer"/>
+      <Reference name="OpenSim.Region.ClientStack"/>
+      
+      <Reference name="OpenMetaverse" path="../../../../../bin/"/>
+      <Reference name="Newtonsoft.Json" path="../../../../../bin/"/>
+      <Reference name="log4net" path="../../../../../bin/"/>
+      <Reference name="Nini" path="../../../../../bin/"/>
+
+      <Files>
+        <Match pattern="*.cs" recurse="false"/>
       </Files>
     </Project>
 

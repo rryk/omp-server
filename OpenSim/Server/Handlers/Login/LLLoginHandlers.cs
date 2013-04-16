@@ -275,9 +275,9 @@ namespace OpenSim.Server.Handlers.Login
         }
 
         class WSConnectionWrapper : IWebSocketJSONConnection {
-            public event MessageDelegate OnMessage;
-
-            public event CloseOrErrorDelegate OnCloseOrError;
+            public event ConnectionMessageDelegate OnMessage;
+            public event ConnectionCloseDelegate OnClose;
+            public event ConnectionErrorDelegate OnError;
 
             public WSConnectionWrapper(WebSocketHttpServerHandler handler)
             {
@@ -293,8 +293,8 @@ namespace OpenSim.Server.Handlers.Login
             public void Listen()
             {
               m_Handler.OnText += (sender, text) => OnMessage(text.Data);
-              m_Handler.OnClose += (sender, data) => OnCloseOrError("Connected closed.");
-              m_Handler.OnUpgradeFailed += (sender, data) => OnCloseOrError("Upgrade failed.");
+              m_Handler.OnClose += (sender, data) => OnClose();
+              m_Handler.OnUpgradeFailed += (sender, data) => OnError("Upgrade failed.");
               m_Handler.HandshakeAndUpgrade();
             }
 
@@ -308,7 +308,7 @@ namespace OpenSim.Server.Handlers.Login
         {
           Connection connection = new Connection(new WSConnectionWrapper(handler));
 
-          FuncWrapper foobar = connection.GenerateFuncWrapper(
+          FunctionWrapper foobar = connection.GenerateFunctionWrapper(
             "opensim.login.foobar",
             "Request.a : Args[0]; Request.b : Args[1]; Response : Result;");
 
