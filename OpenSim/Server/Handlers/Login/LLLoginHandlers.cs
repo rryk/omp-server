@@ -306,7 +306,7 @@ namespace OpenSim.Server.Handlers.Login
         public void HandleWSLogin(string servicepath, WebSocketHttpServerHandler handler)
         {
           Connection connection = new Connection(new WSConnectionWrapper(handler));
-          connection.LoadIDL("http://localhost/home/kiara/idl/login.idl");
+          connection.LoadIDL("http://localhost/home/kiara/idl/login.kiara");
 
           connection.RegisterFuncImplementation(
             "omp.login.login",

@@ -48,26 +48,6 @@ namespace KIARA
     #endregion
 
     #region Private implementation
-    private static object CastJObject(object obj, Type destType)
-    {
-      if (obj.GetType() == destType)                      // types match
-        return obj;
-      else if (destType.IsAssignableFrom(obj.GetType()))  // implicit cast will do the job
-        return obj;
-      else if (destType == typeof(JObject))               // got actual type, but need JObject
-        return new JObject(obj);
-      else if (obj.GetType() == typeof(JObject))          // got JObject, but need actual type
-        return ((JObject)obj).ToObject(destType);
-      // Special cases
-      else if (obj.GetType() == typeof(long) && destType == typeof(int))      // long -> int
-        return Convert.ToInt32((long)obj);
-      else if (obj.GetType() == typeof(double) && destType == typeof(float))  // double -> float
-        return (float)(double)obj;
-      else
-        throw new Error(ErrorCode.INVALID_TYPE,
-                                "Cannot convert " + obj.GetType().Name + " to " + destType.Name);
-    }
-
     internal void SetResult(string eventName, object argument)
     {
       // TODO(rryk): Handle the case when result/error/exception arrives before the handlers are
@@ -79,7 +59,7 @@ namespace KIARA
         foreach (Delegate resultDelegate in OnResult)
         {
           Type retValueType = resultDelegate.Method.GetParameters()[1].ParameterType;
-          resultDelegate.DynamicInvoke(null, CastJObject(argument, retValueType));
+          resultDelegate.DynamicInvoke(null, ConversionUtils.CastJObject(argument, retValueType));
         }
       }
       else if (eventName == "exception")
@@ -88,13 +68,16 @@ namespace KIARA
         foreach (Delegate resultDelegate in OnResult)
         {
           Type exceptionType = resultDelegate.Method.GetParameters()[0].ParameterType;
-          resultDelegate.DynamicInvoke(CastJObject(argument, exceptionType), null);
+          resultDelegate.DynamicInvoke(ConversionUtils.CastJObject(argument, exceptionType), null);
         }
       }
       else if (eventName == "error")
       {
         if (argument.GetType() != typeof(string))
-          throw new Error(ErrorCode.INVALID_ARGUMENT, "Argument for 'error' event must be a string");
+        {
+          throw new Error(ErrorCode.INVALID_ARGUMENT,
+                          "Argument for 'error' event must be a string");
+        }
         OnError((string)argument);
       }
       else

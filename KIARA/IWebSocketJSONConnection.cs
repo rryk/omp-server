@@ -41,7 +41,7 @@ namespace KIARA {
     {
         public void LoadIDL(string uri) 
         {
-            // TODO(rryk): Load IDL.
+            // TODO(rryk): Load and parse IDL.
         }
 
         public WebSocketJSONConnectionImplementation(IWebSocketJSONConnection connection)
@@ -143,7 +143,10 @@ namespace KIARA {
                     }
                     List<object> parameters = new List<object>();
                     for (int i = 0; i < paramInfo.Length; i++)
-                        parameters.Add(((JObject)data[i + 3]).ToObject(paramInfo[i].ParameterType));
+                    {
+                        parameters.Add(ConversionUtils.CastJObject(
+                            data[i + 3], paramInfo[i].ParameterType));
+                    }
 
                     object returnValue = null;
                     object exception = null;

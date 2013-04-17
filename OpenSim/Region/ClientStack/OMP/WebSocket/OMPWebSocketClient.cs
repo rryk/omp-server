@@ -4,15 +4,27 @@ using System.Collections.Generic;
 using log4net;
 using System.Reflection;
 using OpenSim.Framework;
+using OpenMetaverse.Packets;
+using OpenMetaverse;
+using System.Net;
 
 namespace OpenSim.Region.ClientStack.OMP.WebSocket
 {
     public class OMPWebSocketClient : IClientAPI {
         #region Public interface
-        public OMPWebSocketClient(OMPWebSocketServer server, Connection connection, AuthenticateResponse auth) {
+        public OMPWebSocketClient(OMPWebSocketServer server, Connection connection, 
+                                  AuthenticateResponse session, uint circuitCode,
+                                  IPEndPoint remoteEndPoint) {
             m_Connection = connection;
             m_Server = server;
-//            m_Auth = auth;
+
+            CircuitCode = circuitCode;
+            FirstName = session.LoginInfo.First;
+            LastName = session.LoginInfo.Last;
+            StartPos = session.LoginInfo.StartPos;
+            AgentId = session.LoginInfo.Agent;
+            RemoteEndPoint = remoteEndPoint;
+
             ConfigureInterfaces();
         }
         #endregion
@@ -20,7 +32,6 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         #region Private implementation
         private Connection m_Connection;
         private OMPWebSocketServer m_Server;
-//        private AuthenticateResponse m_Auth;
         private Dictionary<string, FunctionWrapper> m_Functions = 
             new Dictionary<string, FunctionWrapper>();
         private static readonly ILog m_Log = 
@@ -37,47 +48,46 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             }
         }
 
-        private delegate bool InterfaceImplementsDelegate(string interfaceURI);
         private bool InterfaceImplements(string interfaceURI)
         {
             return m_SupportedInterfaces.Contains(interfaceURI);
         }
-
-        private delegate void ImplementsResultCallback(Exception exception, bool result);
 
         private void ConfigureInterfaces()
         {
             // Prepare configuration data.
             string[] localInterfaces = {
                 "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connect.kiara"
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara"
             };
 
             Dictionary<string, Delegate> localFunctions = new Dictionary<string, Delegate>
             {
-                {"omp.interface.implements", (InterfaceImplementsDelegate)InterfaceImplements},
+                {"omp.interface.implements", (Func<string ,bool>)InterfaceImplements},
             };
 
             string[] remoteInterfaces = 
             { 
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connect.idl",
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectClient.kiara",
             };
 
-            string[] remoteFunctions =  
+            string[] remoteFunctions = 
             { 
                 "omp.connect.regionHandshake",
             };
 
             // Set up server interfaces.
-            foreach (string supportedInterface in localInterfaces)
-            {
+            foreach (string supportedInterface in localInterfaces) {
                 m_SupportedInterfaces.Add(supportedInterface);
                 m_Connection.LoadIDL(supportedInterface);
             }
 
             // Set up server functions.
-            foreach (KeyValuePair<string, Delegate> localFunction in localFunctions)
-                m_Connection.RegisterFuncImplementation(localFunction.Key, "...", localFunction.Value);
+            foreach (KeyValuePair<string, Delegate> localFunction in localFunctions) {
+                m_Connection.RegisterFuncImplementation(localFunction.Key, "...",
+                                                        localFunction.Value);
+            }
             
             // Set up client interfaces.
             // TODO(rryk): Not sure if callbacks may be executed in several threads at the same 
@@ -92,7 +102,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                 m_Log.Error("Failed to acquire required client interfaces - " + reason);
             };
 
-            ImplementsResultCallback resultCallback = delegate(Exception exception, bool result) {
+            Action<Exception, bool> resultCallback = delegate(Exception exception, bool result) {
                 if (failedToLoad)
                     return;
 
@@ -122,31 +132,17 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         #region IClientAPI implementation
         public OpenMetaverse.Vector3 StartPos
         {
-            get
-            {
-                throw new NotImplementedException();
-            }
-            set
-            {
-                throw new NotImplementedException();
-            }
+            get; set;
         }
 
         public OpenMetaverse.UUID AgentId
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public ISceneAgent SceneAgent
         {
-            get
-            {
-                throw new NotImplementedException();
-            }
-            set
-            {
-                throw new NotImplementedException();
-            }
+            get; set;
         }
 
         public OpenMetaverse.UUID SessionId
@@ -186,12 +182,12 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public string FirstName
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public string LastName
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public IScene Scene
@@ -206,7 +202,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public string Name
         {
-            get { throw new NotImplementedException(); }
+            get { return FirstName + " " + LastName; }
         }
 
         public bool IsActive
@@ -240,12 +236,12 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public uint CircuitCode
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public System.Net.IPEndPoint RemoteEndPoint
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public event GenericMessage OnGenericMessage;
@@ -758,7 +754,51 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public void SendRegionHandshake(RegionInfo regionInfo, RegionHandshakeArgs args)
         {
-            throw new NotImplementedException();
+            RegionHandshakePacket handshake = new RegionHandshakePacket();
+            handshake.RegionInfo = new RegionHandshakePacket.RegionInfoBlock();
+            handshake.RegionInfo.BillableFactor = args.billableFactor;
+            handshake.RegionInfo.IsEstateManager = args.isEstateManager;
+            handshake.RegionInfo.TerrainHeightRange00 = args.terrainHeightRange0;
+            handshake.RegionInfo.TerrainHeightRange01 = args.terrainHeightRange1;
+            handshake.RegionInfo.TerrainHeightRange10 = args.terrainHeightRange2;
+            handshake.RegionInfo.TerrainHeightRange11 = args.terrainHeightRange3;
+            handshake.RegionInfo.TerrainStartHeight00 = args.terrainStartHeight0;
+            handshake.RegionInfo.TerrainStartHeight01 = args.terrainStartHeight1;
+            handshake.RegionInfo.TerrainStartHeight10 = args.terrainStartHeight2;
+            handshake.RegionInfo.TerrainStartHeight11 = args.terrainStartHeight3;
+            handshake.RegionInfo.SimAccess = args.simAccess;
+            handshake.RegionInfo.WaterHeight = args.waterHeight;
+
+            handshake.RegionInfo.RegionFlags = args.regionFlags;
+            handshake.RegionInfo.SimName = Util.StringToBytes256(args.regionName);
+            handshake.RegionInfo.SimOwner = args.SimOwner;
+            handshake.RegionInfo.TerrainBase0 = args.terrainBase0;
+            handshake.RegionInfo.TerrainBase1 = args.terrainBase1;
+            handshake.RegionInfo.TerrainBase2 = args.terrainBase2;
+            handshake.RegionInfo.TerrainBase3 = args.terrainBase3;
+            handshake.RegionInfo.TerrainDetail0 = args.terrainDetail0;
+            handshake.RegionInfo.TerrainDetail1 = args.terrainDetail1;
+            handshake.RegionInfo.TerrainDetail2 = args.terrainDetail2;
+            handshake.RegionInfo.TerrainDetail3 = args.terrainDetail3;
+            // I guess this is for the client to remember an old setting?
+            handshake.RegionInfo.CacheID = UUID.Random();
+            handshake.RegionInfo2 = new RegionHandshakePacket.RegionInfo2Block();
+            handshake.RegionInfo2.RegionID = regionInfo.RegionID;
+
+            handshake.RegionInfo3 = new RegionHandshakePacket.RegionInfo3Block();
+            handshake.RegionInfo3.CPUClassID = 9;
+            handshake.RegionInfo3.CPURatio = 1;
+
+            handshake.RegionInfo3.ColoName = Utils.EmptyBytes;
+            handshake.RegionInfo3.ProductName = Util.StringToBytes256(regionInfo.RegionType);
+            handshake.RegionInfo3.ProductSKU = Utils.EmptyBytes;
+            handshake.RegionInfo4 = new RegionHandshakePacket.RegionInfo4Block[0];
+
+            Call("omp.connect.regionHandshake", handshake).On("result",
+                (Action<RegionHandshakeReplyPacket>) delegate(RegionHandshakeReplyPacket reply) {
+                    m_Log.Info("Received handshake reply: " + reply.ToString());
+                }
+            );
         }
 
         public void SendChatMessage(string message, byte type, OpenMetaverse.Vector3 fromPos, string fromName, OpenMetaverse.UUID fromAgentID, OpenMetaverse.UUID ownerID, byte source, byte audible)

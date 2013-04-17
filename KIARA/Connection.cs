@@ -11,7 +11,7 @@ namespace KIARA
     {
         #region Public interface
         // Loads an IDL file from the |uri|. Parses it's content and adds new types and services to 
-        // the type system.
+        // the type system. When called on a |uri| that was already loaded, does not raise an error.
         public void LoadIDL(string uri)
         {
             Implementation.LoadIDL(uri);
@@ -49,7 +49,8 @@ namespace KIARA
         //
         // It is possible to pass static or instance, private or public methods, delegates or lambda 
         // functions, but any of them must be implicity casted to some delegate type before being 
-        // passed to this method.
+        // passed to this method. When called more than once on the same |qualifiedMethodName| will
+        // override previous entries and use |nativeMethod| that was passed with the last call.
         public void RegisterFuncImplementation(string qualifiedMethodName, string typeMapping, 
                                                Delegate nativeMethod)
         {

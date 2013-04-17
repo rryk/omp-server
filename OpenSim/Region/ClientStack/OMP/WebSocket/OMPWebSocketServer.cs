@@ -74,7 +74,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public void Start()
         {
-            m_HttpServer.AddWebSocketHandler("/region/interface", HandleNewClient);
+            m_HttpServer.AddWebSocketHandler("/region", HandleNewClient);
         }
 
         public void Stop()
@@ -132,33 +132,33 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             private WebSocketHttpServerHandler m_Handler;
         }
 
-        private delegate bool InterfaceImplementsDelegate(string interfaceURI);
         private static bool InterfaceImplements(string interfaceURI) 
         {
             string[] supportedInterfaces = {
                 "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connect.kiara"
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara"
             };
             return Array.IndexOf(supportedInterfaces, interfaceURI) != -1;
         }
 
-        delegate void ConnectUseCircuitCodeDelegate(UInt32 code, UUID agentID, UUID sessionID);
-        void ConnectUseCircuitCode(Connection conn, uint code, UUID agentID, UUID sessionID)
+        void ConnectUseCircuitCode(Connection conn, IPEndPoint remoteEndPoint, uint code, 
+                                   string agentID, string sessionID)
         {
           AuthenticateResponse authResponse =
-            m_CircuitManager.AuthenticateSession(sessionID, agentID, code);
+            m_CircuitManager.AuthenticateSession(new UUID(sessionID), new UUID(agentID), code);
           if (authResponse.Authorised)
-            m_Clients.Add(new OMPWebSocketClient(this, conn, authResponse));
+            m_Clients.Add(new OMPWebSocketClient(this, conn, authResponse, code, remoteEndPoint));
         }
         
         private void HandleNewClient(string servicepath, WebSocketHttpServerHandler handler) {
             Connection conn = new Connection(new WSConnectionWrapper(handler));
             conn.LoadIDL("http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara");
+            conn.LoadIDL("http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara");
             conn.RegisterFuncImplementation("omp.interface.implements", "...",
-                (InterfaceImplementsDelegate)InterfaceImplements);
+                (Func<string, bool>)InterfaceImplements);
             conn.RegisterFuncImplementation("omp.connect.useCircuitCode", "...",
-                (ConnectUseCircuitCodeDelegate)((code, agentID, sessionID) => 
-                  ConnectUseCircuitCode(conn, code, agentID, sessionID)));
+                (Action<UInt32, string, string>)((code, agentID, sessionID) => 
+                  ConnectUseCircuitCode(conn, handler.RemoteIPEndpoint, code, agentID, sessionID)));
         }
 
         #endregion
