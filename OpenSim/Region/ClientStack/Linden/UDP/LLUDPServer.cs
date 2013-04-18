@@ -808,7 +808,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             // continue to display the deleted object until relog.  Therefore, we need to always queue a kill object
             // packet so that it isn't sent before a queued update packet.
             bool requestQueue = type == PacketType.KillObject;
-            Logger.Log("| --> Sending packet type " + type + "|", Helpers.LogLevel.Info);
             if (!outgoingPacket.Client.EnqueueOutgoing(outgoingPacket, requestQueue))
                 SendPacketFinal(outgoingPacket);
 
@@ -945,7 +944,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             #region ACK Appending
 
             int dataLength = buffer.DataLength;
-            List<uint> appendedAcks = new List<uint>();
 
             // NOTE: I'm seeing problems with some viewers when ACKs are appended to zerocoded packets so I've disabled that here
             if (!isZerocoded)
@@ -959,7 +957,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     Utils.UIntToBytesBig(ack, buffer.Data, dataLength);
                     dataLength += 4;
                     ++ackCount;
-                    appendedAcks.Add(ack);
                 }
 
                 if (ackCount > 0)
@@ -999,16 +996,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
             // Stats tracking
             Interlocked.Increment(ref udpClient.PacketsSent);
-
-            string logMessage = "| --> (local seq=" + 
-                outgoingPacket.SequenceNumber + ")";
-            if (appendedAcks.Count > 0) {
-                logMessage += " remote ack: ";
-                foreach (uint appendedAck in appendedAcks)
-                    logMessage += appendedAck + " ";
-            }
-            logMessage += "|";
-            Logger.Log(logMessage, Helpers.LogLevel.Info);
 
             // Put the UDP payload on the wire
             AsyncBeginSend(buffer);
@@ -1105,24 +1092,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             #endregion Decoding
 
             #region Packet to Client Mapping
-
-            string logMessage = "| <-- Received packet type " + packet.Type + " (remote seq=" + 
-                packet.Header.Sequence + ")";
-            if (packet.Type == PacketType.PacketAck ||
-                (packet.Header.AppendedAcks && packet.Header.AckList != null))
-                logMessage += " local acks: ";
-            if (packet.Type == PacketType.PacketAck) {
-                PacketAckPacket ackPacket = (PacketAckPacket)packet;
-                foreach (PacketAckPacket.PacketsBlock block in ackPacket.Packets)
-                    logMessage += block.ID + " ";
-            }
-            if (packet.Header.AppendedAcks && packet.Header.AckList != null) {
-                foreach (uint ackID in packet.Header.AckList)
-                    logMessage += ackID + " ";
-            }
-            logMessage += "|";
-            Logger.Log(logMessage, Helpers.LogLevel.Info);
-
 
             // UseCircuitCode handling
             if (packet.Type == PacketType.UseCircuitCode)
@@ -1452,10 +1421,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             buffer.DataLength = length;
 
             Buffer.BlockCopy(packetData, 0, buffer.Data, 0, length);
-
-            string logMessage = "Sending immediate PacketAck with remote acks: ";
-            foreach (PacketAckPacket.PacketsBlock block in ack.Packets) 
-                logMessage += block.ID;
 
             AsyncBeginSend(buffer);
         }
