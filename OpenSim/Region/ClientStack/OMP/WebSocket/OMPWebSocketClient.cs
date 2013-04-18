@@ -7,41 +7,46 @@ using OpenSim.Framework;
 using OpenMetaverse.Packets;
 using OpenMetaverse;
 using System.Net;
+using OpenSim.Region.Framework.Interfaces;
 
 namespace OpenSim.Region.ClientStack.OMP.WebSocket
 {
     public class OMPWebSocketClient : IClientAPI {
         #region Public interface
-        public OMPWebSocketClient(OMPWebSocketServer server, Connection connection, 
+        public OMPWebSocketClient(OMPWebSocketServer server, IScene scene, Connection connection, 
                                   AuthenticateResponse session, uint circuitCode,
                                   IPEndPoint remoteEndPoint) {
-            m_Connection = connection;
-            m_Server = server;
+            m_connection = connection;
+            m_server = server;
 
+            Scene = scene;
             CircuitCode = circuitCode;
             FirstName = session.LoginInfo.First;
             LastName = session.LoginInfo.Last;
             StartPos = session.LoginInfo.StartPos;
             AgentId = session.LoginInfo.Agent;
+            SessionId = session.LoginInfo.Session;
+            SecureSessionId = session.LoginInfo.SecureSession;
             RemoteEndPoint = remoteEndPoint;
+            IsActive = true;
 
             ConfigureInterfaces();
         }
         #endregion
 
         #region Private implementation
-        private Connection m_Connection;
-        private OMPWebSocketServer m_Server;
-        private Dictionary<string, FunctionWrapper> m_Functions = 
+        private Connection m_connection;
+        private OMPWebSocketServer m_server;
+        private Dictionary<string, FunctionWrapper> m_functions = 
             new Dictionary<string, FunctionWrapper>();
-        private static readonly ILog m_Log = 
+        private static readonly ILog m_log = 
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        private List<string> m_SupportedInterfaces = new List<string>();
+        private List<string> m_supportedInterfaces = new List<string>();
 
         private FunctionCall Call(string name, params object[] parameters)
         {
-            if (m_Functions.ContainsKey(name)) {
-                return m_Functions[name](parameters);
+            if (m_functions.ContainsKey(name)) {
+                return m_functions[name](parameters);
             } else {
                 throw new Error(ErrorCode.INVALID_ARGUMENT,
                                 "Function " + name + " is not registered.");
@@ -50,7 +55,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         private bool InterfaceImplements(string interfaceURI)
         {
-            return m_SupportedInterfaces.Contains(interfaceURI);
+            return m_supportedInterfaces.Contains(interfaceURI);
         }
 
         private void ConfigureInterfaces()
@@ -79,13 +84,13 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
             // Set up server interfaces.
             foreach (string supportedInterface in localInterfaces) {
-                m_SupportedInterfaces.Add(supportedInterface);
-                m_Connection.LoadIDL(supportedInterface);
+                m_supportedInterfaces.Add(supportedInterface);
+                m_connection.LoadIDL(supportedInterface);
             }
 
             // Set up server functions.
             foreach (KeyValuePair<string, Delegate> localFunction in localFunctions) {
-                m_Connection.RegisterFuncImplementation(localFunction.Key, "...",
+                m_connection.RegisterFuncImplementation(localFunction.Key, "...",
                                                         localFunction.Value);
             }
             
@@ -93,43 +98,54 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             // TODO(rryk): Not sure if callbacks may be executed in several threads at the same 
             // time - perhaps we need a mutex for loadedInterfaces and failedToLoad.
             int numInterfaces = remoteInterfaces.Length;
-            int loadedInterfaces =  0;
+            int loadedInterfaces = 0;
             bool failedToLoad = false;
 
-            CallErrorCallback errorCallback = delegate(string reason) {
+            Action<string, string> errorCallback = delegate(string interfaceName, string reason) {
+                if (failedToLoad)
+                    return;
                 failedToLoad = true;
-                m_Server.RemoveClient(this);
-                m_Log.Error("Failed to acquire required client interfaces - " + reason);
+                m_server.RemoveClient(this);
+                m_log.Error("Failed to acquire '" + interfaceName + "' interface - " + reason);
             };
 
-            Action<Exception, bool> resultCallback = delegate(Exception exception, bool result) {
+            Action<string, Exception> excCallback = delegate(string interfaceName, 
+                                                                   Exception exception) {
+                errorCallback(interfaceName, "exception returned by the client");
+            };
+
+            Action<string, bool> resultCallback = delegate(string interfaceName, bool result) {
                 if (failedToLoad)
                     return;
 
-                if (exception != null)
-                    errorCallback("exception returned by the client");
-                else if (!result) 
-                    errorCallback("not supported by the client");
-                else
-                {
+                if (!result) 
+                    errorCallback(interfaceName, "not supported by the client");
+                else {
                     loadedInterfaces += 1;
                     if (loadedInterfaces == numInterfaces) {
                         // Set up client functions.
                         foreach (string func in remoteFunctions)
-                            m_Functions[func] = m_Connection.GenerateFunctionWrapper(func, "...");
-                        m_Server.AddSceneClient(this);
+                            m_functions[func] = m_connection.GenerateFunctionWrapper(func, "...");
+                        m_server.AddSceneClient(this);
                     }
                 }
             };
 
-            FunctionWrapper implements = m_Connection.GenerateFunctionWrapper(
-                "omp.interface.implements", "...", errorCallback, resultCallback);
-            foreach (string interfaceName in remoteInterfaces)
-                implements(interfaceName);
+            FunctionWrapper implements = 
+                m_connection.GenerateFunctionWrapper("omp.interface.implements", "...");
+            foreach (string interfaceName in remoteInterfaces) {
+                implements(interfaceName)
+                    .On("error", 
+                        (CallErrorCallback)((reason) => errorCallback(interfaceName, reason)))
+                    .On("result", (Action<bool>)((result) => resultCallback(interfaceName, result)))
+                    .On("exception", (Action<Exception>)((exc) => excCallback(interfaceName, exc)));
+            }
         }
         #endregion
 
         #region IClientAPI implementation
+        private int m_animationSequenceNumber = 1;
+
         public OpenMetaverse.Vector3 StartPos
         {
             get; set;
@@ -147,37 +163,37 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public OpenMetaverse.UUID SessionId
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public OpenMetaverse.UUID SecureSessionId
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public OpenMetaverse.UUID ActiveGroupId
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public string ActiveGroupName
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public ulong ActiveGroupPowers
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public ulong GetGroupPowers(OpenMetaverse.UUID groupID)
         {
-            throw new NotImplementedException();
+            return 0; /* TODO(rryk): Implement */
         }
 
         public bool IsGroupMember(OpenMetaverse.UUID GroupID)
         {
-            throw new NotImplementedException();
+            return false; /* TODO(rryk): Implement */
         }
 
         public string FirstName
@@ -192,12 +208,12 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public IScene Scene
         {
-            get { throw new NotImplementedException(); }
+            get; private set;
         }
 
         public int NextAnimationSequenceNumber
         {
-            get { throw new NotImplementedException(); }
+            get { return m_animationSequenceNumber++; }
         }
 
         public string Name
@@ -207,31 +223,17 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public bool IsActive
         {
-            get
-            {
-                throw new NotImplementedException();
-            }
-            set
-            {
-                throw new NotImplementedException();
-            }
+            get; set;
         }
 
         public bool IsLoggingOut
         {
-            get
-            {
-                throw new NotImplementedException();
-            }
-            set
-            {
-                throw new NotImplementedException();
-            }
+            get; set;
         }
 
         public bool SendLogoutPacketWhenClosing
         {
-            set { throw new NotImplementedException(); }
+            set { return; /* TODO(rryk): Implement */ }
         }
 
         public uint CircuitCode
@@ -682,74 +684,67 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public int DebugPacketLevel
         {
-            get
-            {
-                throw new NotImplementedException();
-            }
-            set
-            {
-                throw new NotImplementedException();
-            }
+            get; set;
         }
 
         public void InPacket(object NewPack)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void ProcessInPacket(OpenMetaverse.Packets.Packet NewPack)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void Close()
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void Close(bool force)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void Kick(string message)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void Start()
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void Stop()
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendWearables(AvatarWearable[] wearables, int serial)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAppearance(OpenMetaverse.UUID agentID, byte[] visualParams, byte[] textureEntry)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendStartPingCheck(byte seq)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendKillObject(ulong regionHandle, List<uint> localID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAnimations(OpenMetaverse.UUID[] animID, int[] seqs, OpenMetaverse.UUID sourceAgentId, OpenMetaverse.UUID[] objectIDs)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendRegionHandshake(RegionInfo regionInfo, RegionHandshakeArgs args)
@@ -796,484 +791,506 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
             Call("omp.connect.regionHandshake", handshake).On("result",
                 (Action<RegionHandshakeReplyPacket>) delegate(RegionHandshakeReplyPacket reply) {
-                    m_Log.Info("Received handshake reply: " + reply.ToString());
+                    OnRegionHandShakeReply(this);
                 }
             );
         }
 
         public void SendChatMessage(string message, byte type, OpenMetaverse.Vector3 fromPos, string fromName, OpenMetaverse.UUID fromAgentID, OpenMetaverse.UUID ownerID, byte source, byte audible)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendInstantMessage(GridInstantMessage im)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendGenericMessage(string method, List<string> message)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendGenericMessage(string method, List<byte[]> message)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLayerData(float[] map)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLayerData(int px, int py, float[] map)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendWindData(OpenMetaverse.Vector2[] windSpeeds)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendCloudData(float[] cloudCover)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void MoveAgentIntoRegion(RegionInfo regInfo, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 look)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void InformClientOfNeighbour(ulong neighbourHandle, System.Net.IPEndPoint neighbourExternalEndPoint)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public AgentCircuitData RequestClientInfo()
         {
-            throw new NotImplementedException();
+            AgentCircuitData agentData = new AgentCircuitData();
+            agentData.AgentID = AgentId;
+            agentData.SessionID = SessionId;
+            agentData.SecureSessionID = SecureSessionId;
+            agentData.circuitcode = CircuitCode;
+            agentData.child = false;
+            agentData.firstname = FirstName;
+            agentData.lastname = LastName;
+
+            ICapabilitiesModule capsModule = Scene.RequestModuleInterface<ICapabilitiesModule>();
+
+            if (capsModule == null) // can happen when shutting down.
+                return agentData;
+
+            agentData.CapsPath = capsModule.GetCapsPath(AgentId);
+            agentData.ChildrenCapSeeds = new Dictionary<ulong, string>(
+                capsModule.GetChildrenSeeds(AgentId));
+
+            return agentData;
         }
 
         public void CrossRegion(ulong newRegionHandle, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 lookAt, System.Net.IPEndPoint newRegionExternalEndPoint, string capsURL)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendMapBlock(List<MapBlockData> mapBlocks, uint flag)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLocalTeleport(OpenMetaverse.Vector3 position, OpenMetaverse.Vector3 lookAt, uint flags)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendRegionTeleport(ulong regionHandle, byte simAccess, System.Net.IPEndPoint regionExternalEndPoint, uint locationID, uint flags, string capsURL)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTeleportFailed(string reason)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTeleportStart(uint flags)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTeleportProgress(uint flags, string message)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendMoneyBalance(OpenMetaverse.UUID transaction, bool success, byte[] description, int balance)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendPayPrice(OpenMetaverse.UUID objectID, int[] payPrice)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendCoarseLocationUpdate(List<OpenMetaverse.UUID> users, List<OpenMetaverse.Vector3> CoarseLocations)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SetChildAgentThrottle(byte[] throttle)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAvatarDataImmediate(ISceneEntity avatar)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendEntityUpdate(ISceneEntity entity, PrimUpdateFlags updateFlags)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void ReprioritizeUpdates()
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void FlushPrimUpdates()
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendInventoryFolderDetails(OpenMetaverse.UUID ownerID, OpenMetaverse.UUID folderID, List<InventoryItemBase> items, List<InventoryFolderBase> folders, int version, bool fetchFolders, bool fetchItems)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendInventoryItemDetails(OpenMetaverse.UUID ownerID, InventoryItemBase item)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendInventoryItemCreateUpdate(InventoryItemBase Item, uint callbackId)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendRemoveInventoryItem(OpenMetaverse.UUID itemID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTakeControls(int controls, bool passToAgent, bool TakeControls)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTaskInventory(OpenMetaverse.UUID taskID, short serial, byte[] fileName)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTelehubInfo(OpenMetaverse.UUID ObjectID, string ObjectName, OpenMetaverse.Vector3 ObjectPos, OpenMetaverse.Quaternion ObjectRot, List<OpenMetaverse.Vector3> SpawnPoint)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendBulkUpdateInventory(InventoryNodeBase node)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendXferPacket(ulong xferID, uint packet, byte[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAbortXferPacket(ulong xferID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendEconomyData(float EnergyEfficiency, int ObjectCapacity, int ObjectCount, int PriceEnergyUnit, int PriceGroupCreate, int PriceObjectClaim, float PriceObjectRent, float PriceObjectScaleFactor, int PriceParcelClaim, float PriceParcelClaimFactor, int PriceParcelRent, int PricePublicObjectDecay, int PricePublicObjectDelete, int PriceRentLight, int PriceUpload, int TeleportMinPrice, float TeleportPriceExponent)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAvatarPickerReply(AvatarPickerReplyAgentDataArgs AgentData, List<AvatarPickerReplyDataArgs> Data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAgentDataUpdate(OpenMetaverse.UUID agentid, OpenMetaverse.UUID activegroupid, string firstname, string lastname, ulong grouppowers, string groupname, string grouptitle)
         {
-            throw new NotImplementedException();
+            ActiveGroupId = activegroupid;
+            ActiveGroupName = groupname;
+            ActiveGroupPowers = grouppowers;
+
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendPreLoadSound(OpenMetaverse.UUID objectID, OpenMetaverse.UUID ownerID, OpenMetaverse.UUID soundID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendPlayAttachedSound(OpenMetaverse.UUID soundID, OpenMetaverse.UUID objectID, OpenMetaverse.UUID ownerID, float gain, byte flags)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTriggeredSound(OpenMetaverse.UUID soundID, OpenMetaverse.UUID ownerID, OpenMetaverse.UUID objectID, OpenMetaverse.UUID parentID, ulong handle, OpenMetaverse.Vector3 position, float gain)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAttachedSoundGainChange(OpenMetaverse.UUID objectID, float gain)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendNameReply(OpenMetaverse.UUID profileId, string firstname, string lastname)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAlertMessage(string message)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAgentAlertMessage(string message, bool modal)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLoadURL(string objectname, OpenMetaverse.UUID objectID, OpenMetaverse.UUID ownerID, bool groupOwned, string message, string url)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDialog(string objectname, OpenMetaverse.UUID objectID, OpenMetaverse.UUID ownerID, string ownerFirstName, string ownerLastName, string msg, OpenMetaverse.UUID textureID, int ch, string[] buttonlabels)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public bool AddMoney(int debit)
         {
-            throw new NotImplementedException();
+            return false; /* TODO(rryk): Implement */
         }
 
         public void SendSunPos(OpenMetaverse.Vector3 sunPos, OpenMetaverse.Vector3 sunVel, ulong CurrentTime, uint SecondsPerSunCycle, uint SecondsPerYear, float OrbitalPosition)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendViewerEffect(OpenMetaverse.Packets.ViewerEffectPacket.EffectBlock[] effectBlocks)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendViewerTime(int phase)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAvatarProperties(OpenMetaverse.UUID avatarID, string aboutText, string bornOn, byte[] charterMember, string flAbout, uint flags, OpenMetaverse.UUID flImageID, OpenMetaverse.UUID imageID, string profileURL, OpenMetaverse.UUID partnerID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendScriptQuestion(OpenMetaverse.UUID taskID, string taskName, string ownerName, OpenMetaverse.UUID itemID, int question)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendHealth(float health)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendEstateList(OpenMetaverse.UUID invoice, int code, OpenMetaverse.UUID[] Data, uint estateID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendBannedUserList(OpenMetaverse.UUID invoice, EstateBan[] banlist, uint estateID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendRegionInfoToEstateMenu(RegionInfoForEstateMenuArgs args)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendEstateCovenantInformation(OpenMetaverse.UUID covenant)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDetailedEstateData(OpenMetaverse.UUID invoice, string estateName, uint estateID, uint parentEstate, uint estateFlags, uint sunPosition, OpenMetaverse.UUID covenant, uint covenantChanged, string abuseEmail, OpenMetaverse.UUID estateOwner)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLandProperties(int sequence_id, bool snap_selection, int request_result, ILandObject lo, float simObjectBonusFactor, int parcelObjectCapacity, int simObjectCapacity, uint regionFlags)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLandAccessListData(List<LandAccessEntry> accessList, uint accessFlag, int localLandID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendForceClientSelectObjects(List<uint> objectIDs)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendCameraConstraint(OpenMetaverse.Vector4 ConstraintPlane)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLandObjectOwners(LandData land, List<OpenMetaverse.UUID> groups, Dictionary<OpenMetaverse.UUID, int> ownersAndCount)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLandParcelOverlay(byte[] data, int sequence_id)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendParcelMediaCommand(uint flags, ParcelMediaCommandEnum command, float time)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendParcelMediaUpdate(string mediaUrl, OpenMetaverse.UUID mediaTextureID, byte autoScale, string mediaType, string mediaDesc, int mediaWidth, int mediaHeight, byte mediaLoop)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAssetUploadCompleteMessage(sbyte AssetType, bool Success, OpenMetaverse.UUID AssetFullID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendConfirmXfer(ulong xferID, uint PacketID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendXferRequest(ulong XferID, short AssetType, OpenMetaverse.UUID vFileID, byte FilePath, byte[] FileName)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendInitiateDownload(string simFileName, string clientFileName)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendImageFirstPart(ushort numParts, OpenMetaverse.UUID ImageUUID, uint ImageSize, byte[] ImageData, byte imageCodec)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendImageNextPart(ushort partNumber, OpenMetaverse.UUID imageUuid, byte[] imageData)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendImageNotFound(OpenMetaverse.UUID imageid)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendShutdownConnectionNotice()
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendSimStats(SimStats stats)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendObjectPropertiesFamilyData(ISceneEntity Entity, uint RequestFlags)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendObjectPropertiesReply(ISceneEntity Entity)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendPartPhysicsProprieties(ISceneEntity Entity)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAgentOffline(OpenMetaverse.UUID[] agentIDs)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAgentOnline(OpenMetaverse.UUID[] agentIDs)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendSitResponse(OpenMetaverse.UUID TargetID, OpenMetaverse.Vector3 OffsetPos, OpenMetaverse.Quaternion SitOrientation, bool autopilot, OpenMetaverse.Vector3 CameraAtOffset, OpenMetaverse.Vector3 CameraEyeOffset, bool ForceMouseLook)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAdminResponse(OpenMetaverse.UUID Token, uint AdminLevel)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendGroupMembership(GroupMembershipData[] GroupMembership)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendGroupNameReply(OpenMetaverse.UUID groupLLUID, string GroupName)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendJoinGroupReply(OpenMetaverse.UUID groupID, bool success)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendEjectGroupMemberReply(OpenMetaverse.UUID agentID, OpenMetaverse.UUID groupID, bool success)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLeaveGroupReply(OpenMetaverse.UUID groupID, bool success)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendCreateGroupReply(OpenMetaverse.UUID groupID, bool success, string message)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLandStatReply(uint reportType, uint requestFlags, uint resultCount, LandStatReportItem[] lsrpia)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendScriptRunningReply(OpenMetaverse.UUID objectID, OpenMetaverse.UUID itemID, bool running)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAsset(AssetRequestToClient req)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTexture(AssetBase TextureAsset)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public byte[] GetThrottlesPacked(float multiplier)
         {
-            throw new NotImplementedException();
+            return new byte[0]; /* TODO(rryk): Implement */
         }
 
         public event ViewerEffectEventHandler OnViewerEffect;
@@ -1284,247 +1301,247 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public void SendBlueBoxMessage(OpenMetaverse.UUID FromAvatarID, string FromAvatarName, string Message)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendLogoutPacket()
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public ClientInfo GetClientInfo()
         {
-            throw new NotImplementedException();
+            return new ClientInfo(); /* TODO(rryk): Implement */
         }
 
         public void SetClientInfo(ClientInfo info)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SetClientOption(string option, string value)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public string GetClientOption(string option)
         {
-            throw new NotImplementedException();
+            return string.Empty; /* TODO(rryk): Implement */
         }
 
         public void SendSetFollowCamProperties(OpenMetaverse.UUID objectID, SortedDictionary<int, float> parameters)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendClearFollowCamProperties(OpenMetaverse.UUID objectID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendRegionHandle(OpenMetaverse.UUID regoinID, ulong handle)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendParcelInfo(RegionInfo info, LandData land, OpenMetaverse.UUID parcelID, uint x, uint y)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendScriptTeleportRequest(string objName, string simName, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 lookAt)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDirPlacesReply(OpenMetaverse.UUID queryID, DirPlacesReplyData[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDirPeopleReply(OpenMetaverse.UUID queryID, DirPeopleReplyData[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDirEventsReply(OpenMetaverse.UUID queryID, DirEventsReplyData[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDirGroupsReply(OpenMetaverse.UUID queryID, DirGroupsReplyData[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDirClassifiedReply(OpenMetaverse.UUID queryID, DirClassifiedReplyData[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDirLandReply(OpenMetaverse.UUID queryID, DirLandReplyData[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDirPopularReply(OpenMetaverse.UUID queryID, DirPopularReplyData[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendEventInfoReply(EventData info)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendMapItemReply(mapItemReply[] replies, uint mapitemtype, uint flags)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAvatarGroupsReply(OpenMetaverse.UUID avatarID, GroupMembershipData[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendOfferCallingCard(OpenMetaverse.UUID srcID, OpenMetaverse.UUID transactionID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAcceptCallingCard(OpenMetaverse.UUID transactionID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendDeclineCallingCard(OpenMetaverse.UUID transactionID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTerminateFriend(OpenMetaverse.UUID exFriendID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAvatarClassifiedReply(OpenMetaverse.UUID targetID, OpenMetaverse.UUID[] classifiedID, string[] name)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendClassifiedInfoReply(OpenMetaverse.UUID classifiedID, OpenMetaverse.UUID creatorID, uint creationDate, uint expirationDate, uint category, string name, string description, OpenMetaverse.UUID parcelID, uint parentEstate, OpenMetaverse.UUID snapshotID, string simName, OpenMetaverse.Vector3 globalPos, string parcelName, byte classifiedFlags, int price)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAgentDropGroup(OpenMetaverse.UUID groupID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void RefreshGroupMembership()
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAvatarNotesReply(OpenMetaverse.UUID targetID, string text)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAvatarPicksReply(OpenMetaverse.UUID targetID, Dictionary<OpenMetaverse.UUID, string> picks)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendPickInfoReply(OpenMetaverse.UUID pickID, OpenMetaverse.UUID creatorID, bool topPick, OpenMetaverse.UUID parcelID, string name, string desc, OpenMetaverse.UUID snapshotID, string user, string originalName, string simName, OpenMetaverse.Vector3 posGlobal, int sortOrder, bool enabled)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAvatarClassifiedReply(OpenMetaverse.UUID targetID, Dictionary<OpenMetaverse.UUID, string> classifieds)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendParcelDwellReply(int localID, OpenMetaverse.UUID parcelID, float dwell)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendUserInfoReply(bool imViaEmail, bool visible, string email)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendUseCachedMuteList()
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendMuteListUpdate(string filename)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendGroupActiveProposals(OpenMetaverse.UUID groupID, OpenMetaverse.UUID transactionID, GroupActiveProposals[] Proposals)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendGroupVoteHistory(OpenMetaverse.UUID groupID, OpenMetaverse.UUID transactionID, GroupVoteHistory[] Votes)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public bool AddGenericPacketHandler(string MethodName, GenericMessage handler)
         {
-            throw new NotImplementedException();
+            return false; /* TODO(rryk): Implement */
         }
 
         public void SendRebakeAvatarTextures(OpenMetaverse.UUID textureID)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendAvatarInterestsReply(OpenMetaverse.UUID avatarID, uint wantMask, string wantText, uint skillsMask, string skillsText, string languages)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendGroupAccountingDetails(IClientAPI sender, OpenMetaverse.UUID groupID, OpenMetaverse.UUID transactionID, OpenMetaverse.UUID sessionID, int amt)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendGroupAccountingSummary(IClientAPI sender, OpenMetaverse.UUID groupID, uint moneyAmt, int totalTier, int usedTier)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendGroupTransactionsSummaryDetails(IClientAPI sender, OpenMetaverse.UUID groupID, OpenMetaverse.UUID transactionID, OpenMetaverse.UUID sessionID, int amt)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendChangeUserRights(OpenMetaverse.UUID agentID, OpenMetaverse.UUID friendID, int rights)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendTextBoxRequest(string message, int chatChannel, string objectname, OpenMetaverse.UUID ownerID, string ownerFirstName, string ownerLastName, OpenMetaverse.UUID objectId)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void StopFlying(ISceneEntity presence)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
 
         public void SendPlacesReply(OpenMetaverse.UUID queryID, OpenMetaverse.UUID transactionID, PlacesReplyData[] data)
         {
-            throw new NotImplementedException();
+            return; /* TODO(rryk): Implement */
         }
         #endregion
     }

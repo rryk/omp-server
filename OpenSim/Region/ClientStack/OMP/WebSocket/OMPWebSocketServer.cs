@@ -47,9 +47,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                                bool allow_alternate_port, IConfigSource configSource, 
                                AgentCircuitManager circuitManager)
         {
-            m_CircuitManager = circuitManager;
-//            m_ConfigSource = configSource;
-            m_HttpServer = MainServer.Instance;
+            m_circuitManager = circuitManager;
+//            m_configSource = configSource;
+            m_httpServer = MainServer.Instance;
             port = MainServer.Instance.Port;
         }
 
@@ -60,50 +60,50 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public void AddScene(IScene scene)
         {
-            if (m_Scene != null)
-                m_Log.Error("AddScene called on OMPWebSocketServer that already has a scene.");
+            if (m_scene != null)
+                m_log.Error("AddScene called on OMPWebSocketServer that already has a scene.");
 
-            m_Scene = scene;
-            m_Location = new Location(scene.RegionInfo.RegionHandle);
+            m_scene = scene;
+            m_location = new Location(scene.RegionInfo.RegionHandle);
         }
 
         public bool HandlesRegion(Location x)
         {
-            return x == m_Location;
+            return x == m_location;
         }
 
         public void Start()
         {
-            m_HttpServer.AddWebSocketHandler("/region", HandleNewClient);
+            m_httpServer.AddWebSocketHandler("/region", HandleNewClient);
         }
 
         public void Stop()
         {
-            m_Log.Info("Stop");
+            m_log.Info("Stop");
         }
         #endregion
 
         #region Internal methods
         internal void RemoveClient(OMPWebSocketClient client)
         {
-            m_Clients.Remove(client);
+            m_clients.Remove(client);
         }
 
         internal void AddSceneClient(IClientAPI client)
         {
-            m_Scene.AddNewClient(client, PresenceType.User);
+            m_scene.AddNewClient(client, PresenceType.User);
         }
         #endregion
 
         #region Private implementation
-        private IScene m_Scene = null;
-        private Location m_Location = null;
-        private AgentCircuitManager m_CircuitManager = null;
-//        private IConfigSource m_ConfigSource = null;
-        private BaseHttpServer m_HttpServer = null;
-        private static readonly ILog m_Log = 
+        private IScene m_scene = null;
+        private Location m_location = null;
+        private AgentCircuitManager m_circuitManager = null;
+//        private IConfigSource m_configSource = null;
+        private BaseHttpServer m_httpServer = null;
+        private static readonly ILog m_log = 
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        private List<OMPWebSocketClient> m_Clients = new List<OMPWebSocketClient>();
+        private List<OMPWebSocketClient> m_clients = new List<OMPWebSocketClient>();
 
         private class WSConnectionWrapper : IWebSocketJSONConnection {
             public event ConnectionMessageDelegate OnMessage;
@@ -112,24 +112,24 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
             public WSConnectionWrapper(WebSocketHttpServerHandler handler)
             {
-                m_Handler = handler;
+                m_handler = handler;
             }
 
             public bool Send(string data)
             {
-              m_Handler.SendMessage(data);
+              m_handler.SendMessage(data);
               return true;
             }
 
             public void Listen()
             {
-              m_Handler.OnText += (sender, text) => OnMessage(text.Data);
-              m_Handler.OnClose += (sender, data) => OnClose();
-              m_Handler.OnUpgradeFailed += (sender, data) => OnError("Upgrade failed.");
-              m_Handler.HandshakeAndUpgrade();
+              m_handler.OnText += (sender, text) => OnMessage(text.Data);
+              m_handler.OnClose += (sender, data) => OnClose();
+              m_handler.OnUpgradeFailed += (sender, data) => OnError("Upgrade failed.");
+              m_handler.HandshakeAndUpgrade();
             }
 
-            private WebSocketHttpServerHandler m_Handler;
+            private WebSocketHttpServerHandler m_handler;
         }
 
         private static bool InterfaceImplements(string interfaceURI) 
@@ -144,10 +144,13 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         void ConnectUseCircuitCode(Connection conn, IPEndPoint remoteEndPoint, uint code, 
                                    string agentID, string sessionID)
         {
-          AuthenticateResponse authResponse =
-            m_CircuitManager.AuthenticateSession(new UUID(sessionID), new UUID(agentID), code);
-          if (authResponse.Authorised)
-            m_Clients.Add(new OMPWebSocketClient(this, conn, authResponse, code, remoteEndPoint));
+            AuthenticateResponse authResponse =
+            m_circuitManager.AuthenticateSession(new UUID(sessionID), new UUID(agentID), code);
+            if (authResponse.Authorised) 
+            {
+                m_clients.Add(new OMPWebSocketClient(
+                    this, m_scene, conn, authResponse, code, remoteEndPoint));
+            }
         }
         
         private void HandleNewClient(string servicepath, WebSocketHttpServerHandler handler) {

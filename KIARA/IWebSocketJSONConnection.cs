@@ -54,9 +54,12 @@ namespace KIARA {
         }
 
         public FunctionWrapper GenerateFuncWrapper(string qualifiedMethodName, string typeMapping, 
-                                                   params Delegate[] defaultHandlers)
+                                                   Dictionary<string, Delegate> defaultHandlers)
         {
-            ValidateDefaultHandlers(defaultHandlers);
+            // Validate default handlers.
+            foreach (KeyValuePair<string, Delegate> defaultHandler in defaultHandlers)
+                FunctionCall.ValidateHandler(defaultHandler.Key, defaultHandler.Value);
+
             return (FunctionWrapper)delegate(object[] parameters)
             {
                 int callID = NextCallID++;
@@ -70,40 +73,18 @@ namespace KIARA {
                 if (IsOneWay(qualifiedMethodName))
                     return null;
 
-                FunctionCall wrapper = new FunctionCall();
-                foreach (Delegate handler in defaultHandlers) 
-                {
-                    if (handler.GetType() == typeof(CallErrorCallback))
-                        wrapper.OnError += (CallErrorCallback)handler;
-                    else
-                        wrapper.OnResult.Add(handler);
-                }
+                FunctionCall callObj = new FunctionCall();
+                foreach (KeyValuePair<string, Delegate> defaultHandler in defaultHandlers)
+                    callObj.On(defaultHandler.Key, defaultHandler.Value);
 
-                ActiveCalls.Add(callID, wrapper);
-                return wrapper;
+                ActiveCalls.Add(callID, callObj);
+                return callObj;
             };
         }
 
         private bool IsOneWay(string qualifiedMethodName)
         {
             return qualifiedMethodName == "omp.connect.handshake";
-        }
-
-        private void ValidateDefaultHandlers(object[] defaultHandlers)
-        {
-            foreach (object handler in defaultHandlers)
-            {
-                if (handler.GetType() != typeof(CallResultCallback) &&
-                    handler.GetType() != typeof(CallErrorCallback) &&
-                    // Generic call result delegate.
-                    !(handler.GetType().IsSubclassOf(typeof(Delegate)) &&
-                      ((Delegate)handler).Method.GetParameters().Length == 2 &&
-                      ((Delegate)handler).Method.ReturnType == typeof(void)))
-                {
-                    throw new Error(ErrorCode.INVALID_ARGUMENT,
-                                    "Invalid default handler type: " + handler.GetType().Name);
-                }
-            }
         }
 
         private void HandleMessage(string message)

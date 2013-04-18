@@ -17,13 +17,18 @@ namespace KIARA
             Implementation.LoadIDL(uri);
         }
 
-        // Returns a function wrapper for an IDL method with qualifiedMethodName, send a call to the 
-        // remove end and assign defaultHandlers if any (see FunctionCall for handler types). 
-        // Parameters, exception and return value are serialized/deserialized according to 
-        // typeMapping.
+        // Returns a function wrapper for an IDL method with |qualifiedMethodName| that sends a call
+        // to the remote end using |typeMapping| for serialization/desirialization.
         public FunctionWrapper GenerateFunctionWrapper(string qualifiedMethodName, 
-                                                       string typeMapping, 
-                                                       params Delegate[] defaultHandlers)
+                                                    string typeMapping) {
+            return GenerateFunctionWrapper(qualifiedMethodName, typeMapping, 
+                                           new Dictionary<string, Delegate>());
+        }
+
+        // Same as above, but |defaultHandlers| are automatically assigned to each call.
+        public FunctionWrapper GenerateFunctionWrapper(
+            string qualifiedMethodName, string typeMapping, 
+            Dictionary<string, Delegate> defaultHandlers)
         {
             return Implementation.GenerateFuncWrapper(qualifiedMethodName, typeMapping, 
                                                       defaultHandlers);
@@ -64,7 +69,7 @@ namespace KIARA
         {
             void LoadIDL(string uri);
             FunctionWrapper GenerateFuncWrapper(string qualifiedMethodName, string typeMapping,
-                                                params Delegate[] defaultHandlers);
+                                                Dictionary<string, Delegate> defaultHandlers);
             void RegisterFuncImplementation(string qualifiedMethodName, string typeMapping, 
                                             Delegate nativeMethod);
         }
