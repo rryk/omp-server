@@ -15,8 +15,8 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         #region Public interface
         public Client(Server server, IScene scene, Connection connection, 
                       AuthenticateResponse session, uint circuitCode, IPEndPoint remoteEndPoint) {
-            m_connection = connection;
-            m_server = server;
+            m_Connection = connection;
+            m_Server = server;
 
             Scene = scene;
             CircuitCode = circuitCode;
@@ -34,62 +34,117 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         #endregion
 
         #region Private implementation
-        private Connection m_connection;
-        private Server m_server;
-        private Dictionary<string, FunctionWrapper> m_functions = 
+        private Connection m_Connection;
+        private Server m_Server;
+        private Dictionary<string, FunctionWrapper> m_Functions = 
             new Dictionary<string, FunctionWrapper>();
-        private static readonly ILog m_log = 
+        private static readonly ILog m_Log = 
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        private List<string> m_supportedInterfaces = new List<string>();
+        private List<string> m_SupportedInterfaces = new List<string>();
 
         private FunctionCall Call(string name, params object[] parameters)
         {
-            if (m_functions.ContainsKey(name)) {
-                return m_functions[name](parameters);
+            if (m_Functions.ContainsKey(name)) {
+                return m_Functions[name](parameters);
             } else {
                 throw new Error(ErrorCode.INVALID_ARGUMENT,
                                 "Function " + name + " is not registered.");
             }
         }
+        private uint m_agentFOVCounter = 0;
 
+        #region Incoming message handlers
         private bool InterfaceImplements(string interfaceURI)
         {
-            return m_supportedInterfaces.Contains(interfaceURI);
+            return m_SupportedInterfaces.Contains(interfaceURI);
         }
+
+        private void CompleteAgentMovement() {
+            if (OnCompleteMovementToRegion != null)
+                OnCompleteMovementToRegion(this, true);
+        }
+
+        private void LogoutRequest(LogoutRequestPacket packet) {
+            if (packet.AgentData.SessionID != SessionId)
+                return;
+            OnLogout(this);
+        }
+
+        private void AgentFOV(AgentFOVPacket packet) {
+            if (packet.FOVBlock.GenCounter > m_agentFOVCounter) {
+                m_agentFOVCounter = fovPacket.FOVBlock.GenCounter;
+                OnAgentFOV(this, packet.FOVBlock.VerticalAngle);
+            }
+        }
+        #endregion
 
         private void ConfigureInterfaces()
         {
             // Prepare configuration data.
             string[] localInterfaces = {
                 "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara"
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara",
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/viewer.kiara",
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/agentsServer.kiara",
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/systemServer.kiara",
             };
 
             Dictionary<string, Delegate> localFunctions = new Dictionary<string, Delegate>
             {
-                {"omp.interface.implements", (Func<string ,bool>)InterfaceImplements},
+                {"omp.interface.implements", (Func<string, bool>)InterfaceImplements},
+                {"omp.connect.completeAgentMovement", (Action)CompleteAgentMovement},
+                {"omp.connect.logoutRequest", (Action<LogoutRequestPacket>)LogoutRequest},
+                {"omp.viewer.agentFOV", (Action<AgentFOVPacket>)AgentFOV},
+                {"omp.viewer.setAlwaysRun", },
+                {"omp.viewer.agentHeightWidth", },
+                {"omp.agents.agentSetAppearance", },
+                {"omp.agents.agentUpdate", },
+                {"omp.agents.agentWearablesRequest", },
+                {"omp.agents.agentAnimation", },
+                {"omp.agents.agentIsNowWearing", },
+                {"omp.system.agentThrottle", },
+                {"omp.system.startPingCheck", },
+
             };
 
             string[] remoteInterfaces = 
             { 
                 "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
                 "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectClient.kiara",
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/agentsClient.kiara",
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/objects.kiara",
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/environment.kiara",
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/systemClient.kiara",
             };
 
             string[] remoteFunctions = 
             { 
+                "omp.interface.implements",
                 "omp.connect.regionHandshake",
+                "omp.connect.agentMovementComplete",
+                "omp.connect.logoutResponse",
+                "omp.agents.avatarAppearance",
+                "omp.agents.avatarAnimation",
+                "omp.agents.coarseLocationUpdate",
+                "omp.agents.agentWearablesUpdate",
+                "omp.objects.improvedTerseObjectUpdate",
+                "omp.objects.objectUpdate",
+                "omp.objects.killObject",
+                "omp.environment.layerData",
+                "omp.environment.simStats",
+                "omp.environment.simulatorViewerTimeMessage",
+                "omp.system.startPingCheck",
             };
 
             // Set up server interfaces.
             foreach (string supportedInterface in localInterfaces) {
-                m_supportedInterfaces.Add(supportedInterface);
-                m_connection.LoadIDL(supportedInterface);
+                m_SupportedInterfaces.Add(supportedInterface);
+                m_Connection.LoadIDL(supportedInterface);
             }
 
             // Set up server functions.
             foreach (KeyValuePair<string, Delegate> localFunction in localFunctions) {
-                m_connection.RegisterFuncImplementation(localFunction.Key, "...",
+                m_Connection.RegisterFuncImplementation(localFunction.Key, "...",
                                                         localFunction.Value);
             }
             
@@ -104,8 +159,8 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                 if (failedToLoad)
                     return;
                 failedToLoad = true;
-                m_server.RemoveClient(this);
-                m_log.Error("Failed to acquire '" + interfaceName + "' interface - " + reason);
+                m_Server.RemoveClient(this);
+                m_Log.Error("Failed to acquire '" + interfaceName + "' interface - " + reason);
             };
 
             Action<string, Exception> excCallback = delegate(string interfaceName, 
@@ -124,14 +179,14 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                     if (loadedInterfaces == numInterfaces) {
                         // Set up client functions.
                         foreach (string func in remoteFunctions)
-                            m_functions[func] = m_connection.GenerateFunctionWrapper(func, "...");
-                        m_server.AddSceneClient(this);
+                            m_Functions[func] = m_Connection.GenerateFunctionWrapper(func, "...");
+                        m_Server.AddSceneClient(this);
                     }
                 }
             };
 
             FunctionWrapper implements = 
-                m_connection.GenerateFunctionWrapper("omp.interface.implements", "...");
+                m_Connection.GenerateFunctionWrapper("omp.interface.implements", "...");
             foreach (string interfaceName in remoteInterfaces) {
                 implements(interfaceName)
                     .On("error", 

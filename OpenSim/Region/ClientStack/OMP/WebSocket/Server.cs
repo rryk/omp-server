@@ -136,7 +136,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         {
             string[] supportedInterfaces = {
                 "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara"
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectInit.kiara"
             };
             return Array.IndexOf(supportedInterfaces, interfaceURI) != -1;
         }
@@ -155,7 +155,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         private void HandleNewClient(string servicepath, WebSocketHttpServerHandler handler) {
             Connection conn = new Connection(new WSConnectionWrapper(handler));
             conn.LoadIDL("http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara");
-            conn.LoadIDL("http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara");
+            conn.LoadIDL("http://yellow.cg.uni-saarland.de/home/kiara/idl/connectInit.kiara");
             conn.RegisterFuncImplementation("omp.interface.implements", "...",
                 (Func<string, bool>)InterfaceImplements);
             conn.RegisterFuncImplementation("omp.connect.useCircuitCode", "...",
