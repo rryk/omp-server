@@ -40,7 +40,7 @@ using OpenMetaverse;
 
 namespace OpenSim.Region.ClientStack.OMP.WebSocket
 {
-    public sealed class OMPWebSocketServer : IClientNetworkServer
+    public sealed class Server : IClientNetworkServer
     {
         #region IClientNetworkServer implementation
         public void Initialise(IPAddress listenIP, ref uint port, int proxyPortOffsetParm, 
@@ -84,7 +84,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         #endregion
 
         #region Internal methods
-        internal void RemoveClient(OMPWebSocketClient client)
+        internal void RemoveClient(Client client)
         {
             m_clients.Remove(client);
         }
@@ -103,7 +103,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         private BaseHttpServer m_httpServer = null;
         private static readonly ILog m_log = 
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        private List<OMPWebSocketClient> m_clients = new List<OMPWebSocketClient>();
+        private List<Client> m_clients = new List<Client>();
 
         private class WSConnectionWrapper : IWebSocketJSONConnection {
             public event ConnectionMessageDelegate OnMessage;
@@ -148,8 +148,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             m_circuitManager.AuthenticateSession(new UUID(sessionID), new UUID(agentID), code);
             if (authResponse.Authorised) 
             {
-                m_clients.Add(new OMPWebSocketClient(
-                    this, m_scene, conn, authResponse, code, remoteEndPoint));
+                m_clients.Add(new Client(this, m_scene, conn, authResponse, code, remoteEndPoint));
             }
         }
         

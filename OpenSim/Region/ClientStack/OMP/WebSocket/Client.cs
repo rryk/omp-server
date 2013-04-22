@@ -11,11 +11,10 @@ using OpenSim.Region.Framework.Interfaces;
 
 namespace OpenSim.Region.ClientStack.OMP.WebSocket
 {
-    public class OMPWebSocketClient : IClientAPI {
+    public class Client : IClientAPI {
         #region Public interface
-        public OMPWebSocketClient(OMPWebSocketServer server, IScene scene, Connection connection, 
-                                  AuthenticateResponse session, uint circuitCode,
-                                  IPEndPoint remoteEndPoint) {
+        public Client(Server server, IScene scene, Connection connection, 
+                      AuthenticateResponse session, uint circuitCode, IPEndPoint remoteEndPoint) {
             m_connection = connection;
             m_server = server;
 
@@ -36,7 +35,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         #region Private implementation
         private Connection m_connection;
-        private OMPWebSocketServer m_server;
+        private Server m_server;
         private Dictionary<string, FunctionWrapper> m_functions = 
             new Dictionary<string, FunctionWrapper>();
         private static readonly ILog m_log = 
