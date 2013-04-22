@@ -143,6 +143,12 @@ namespace OpenSim.Framework
         [XmlIgnore] private float _projectionFocus;
         [XmlIgnore] private float _projectionAmb;
 
+        // XML3D Representation
+        // FIXME: Currently it's just a hack and we will set and get the value of this property 
+        // directly, but correct implementation would be to derive all other fields in setter and
+        // construct this representation dynamically in getter.
+        public string XML3DRepresentation { get; set; }
+
         public byte ProfileCurve
         {
             get { return (byte)((byte)HollowShape | (byte)ProfileShape); }

@@ -54,6 +54,12 @@ namespace OpenSim.Framework
         protected Dictionary<int, List<AvatarAttachment>> m_attachments;
         protected float m_avatarHeight = 0;
 
+        // XML3D Representation
+        // FIXME: Currently it's just a hack and we will set and get the value of this property 
+        // directly, but correct implementation would be to derive all other fields in setter and
+        // construct this representation dynamically in getter.
+        public string XML3DRepresentation { get; set; }
+
         public virtual int Serial
         {
             get { return m_serial; }
