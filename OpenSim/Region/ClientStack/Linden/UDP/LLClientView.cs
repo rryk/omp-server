@@ -456,7 +456,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         public LLClientView(Scene scene, LLUDPServer udpServer, LLUDPClient udpClient, AuthenticateResponse sessionInfo,
             UUID agentId, UUID sessionId, uint circuitCode)
         {
-//            DebugPacketLevel = 1;
+            DebugPacketLevel = 256;
 
             CloseSyncLock = new Object();
 
