@@ -36,26 +36,31 @@ namespace KIARA
 
         // Registers nativeMethod as an implementation of the IDL method with qualifiedMethodName. 
         // Parameters, return value and exceptions are serialized/deserialized according to 
-        // typeMapping. To pass an arbitrary method in place of the nativeMethod argument the user 
-        // must declarare respective delegate type and cast passed method implicitly. For example, 
-        // let's say the user wants to use a static method Bar of the class Foo as an implementation 
-        // for some IDL function "myservice.foobar":
+        // typeMapping. When called more than once on the same |qualifiedMethodName| will
+        // override previous entry and use |nativeMethod| that was passed with the last call.
+        // To pass an arbitrary method in place of the |nativeMethod| argument the user must and 
+        // cast passed method to a respective delegate type implicitly. For example, if a user needs
+        // to use a static method Bar of the class Foo as an implementation for some IDL function 
+        // "myservice.foobar", he would need to write the following code:
         //
         //   class Foo {
-        //     public static int Bar(float x) {
+        //     public static int Bar(float x, string s) { ... }
         //   };
         //
-        //   delegate int FooBarDelegate(float x);
+        //   delegate int FooBarDelegate(float x, string s);
         //
-        //   ...
         //   connection.RegisterFuncImplementation("myservice.foobar", "...", 
         //                                         (FooBarDelegate)Foo.Bar);
-        //   ...
         //
-        // It is possible to pass static or instance, private or public methods, delegates or lambda 
-        // functions, but any of them must be implicity casted to some delegate type before being 
-        // passed to this method. When called more than once on the same |qualifiedMethodName| will
-        // override previous entries and use |nativeMethod| that was passed with the last call.
+        // One can also use Func template that is available in .NET Framework 3.5 or later to avoid 
+        // declaring a new delegate type for each registered function:
+        //
+        //   connection.RegisterFuncImplementation("myservice.foobar", "...", 
+        //                                         (Func<float, string, int>)Foo.Bar);
+        //
+        // It is possible to pass static/instance, private/public methods, delegates or lambda 
+        // functions, but all of them must be implicity casted to some delegate type as shown
+        // above.
         public void RegisterFuncImplementation(string qualifiedMethodName, string typeMapping, 
                                                Delegate nativeMethod)
         {
