@@ -100,7 +100,9 @@ namespace OpenSim.Framework.Servers.HttpServer
         public ValidateHandshake HandshakeValidateMethodOverride = null;
 
         private OSHttpRequest _request;
+
         private HTTPNetworkContext _networkContext;
+
         private IHttpClientContext _clientContext;
 
         private int _pingtime = 0;
@@ -360,6 +362,8 @@ namespace OpenSim.Framework.Servers.HttpServer
                     // Do Disconnect
                     _networkContext.Stream.Dispose();
                     _networkContext = null;
+                    if (OnClose != null)
+                        OnClose(this, new CloseEventArgs());
                     return;
                 }
                 _bufferPosition += bytesRead;

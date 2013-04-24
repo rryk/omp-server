@@ -32,6 +32,10 @@ namespace KIARA {
         public Connection(IWebSocketJSONConnection connection)
         {
             Implementation = new WebSocketJSONConnectionImplementation(connection);
+            Implementation.OnClose += delegate(string reason) {
+                if (OnClose != null)
+                    OnClose(reason);
+            };
         }
     }
 
@@ -39,6 +43,8 @@ namespace KIARA {
 
     internal class WebSocketJSONConnectionImplementation : Connection.IImplementation
     {
+        public event Connection.CloseDelegate OnClose;
+
         public void LoadIDL(string uri) 
         {
             // TODO(rryk): Load and parse IDL.
@@ -68,7 +74,8 @@ namespace KIARA {
                 callMessage.Add(callID);
                 callMessage.Add(qualifiedMethodName);
                 callMessage.AddRange(parameters);
-                Connection.Send(JsonConvert.SerializeObject(callMessage));
+                string serializedMessage = JsonConvert.SerializeObject(callMessage);
+                Connection.Send(serializedMessage);
 
                 if (IsOneWay(qualifiedMethodName))
                     return null;
@@ -178,6 +185,8 @@ namespace KIARA {
             foreach (KeyValuePair<int, FunctionCall> call in ActiveCalls)
                 call.Value.SetResult("error", reason);
             ActiveCalls.Clear();
+            if (OnClose != null)
+                OnClose(reason);
         }
 
         public void RegisterFuncImplementation(string qualifiedMethodName, string typeMapping, 

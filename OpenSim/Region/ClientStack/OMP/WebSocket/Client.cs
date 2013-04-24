@@ -8,6 +8,7 @@ using OpenMetaverse.Packets;
 using OpenMetaverse;
 using System.Net;
 using OpenSim.Region.Framework.Interfaces;
+using OpenSim.Region.Framework.Scenes;
 
 namespace OpenSim.Region.ClientStack.OMP.WebSocket
 {
@@ -15,8 +16,8 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         #region Public interface
         public Client(Server server, IScene scene, Connection connection, 
                       AuthenticateResponse session, uint circuitCode, IPEndPoint remoteEndPoint) {
-            m_Connection = connection;
-            m_Server = server;
+            m_connection = connection;
+            m_server = server;
 
             Scene = scene;
             CircuitCode = circuitCode;
@@ -31,120 +32,310 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
             ConfigureInterfaces();
         }
+
+        readonly public static List<string> LocalInterfaces = new List<string>{
+            "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
+            "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara",
+            "http://yellow.cg.uni-saarland.de/home/kiara/idl/chatServer.kiara"
+        };
         #endregion
 
         #region Private implementation
-        private Connection m_Connection;
-        private Server m_Server;
-        private Dictionary<string, FunctionWrapper> m_Functions = 
+        private Connection m_connection;
+        private Server m_server;
+        private Dictionary<string, FunctionWrapper> m_functions = 
             new Dictionary<string, FunctionWrapper>();
-        private static readonly ILog m_Log = 
+        private static readonly ILog m_log = 
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        private List<string> m_SupportedInterfaces = new List<string>();
+        private List<string> m_remoteInterfaces = new List<string>();
 
         private FunctionCall Call(string name, params object[] parameters)
         {
-            if (m_Functions.ContainsKey(name)) {
-                return m_Functions[name](parameters);
+            if (m_functions.ContainsKey(name)) {
+                return m_functions[name](parameters);
             } else {
                 throw new Error(ErrorCode.INVALID_ARGUMENT,
                                 "Function " + name + " is not registered.");
             }
         }
-        private uint m_agentFOVCounter = 0;
+
+        private bool HasRemoteInterface(string uri) {
+            return m_remoteInterfaces.Contains(uri);
+        }
 
         #region Incoming message handlers
-        private bool InterfaceImplements(string interfaceURI)
+        private bool HandleInterfaceImplements(string interfaceURI)
         {
-            return m_SupportedInterfaces.Contains(interfaceURI);
+            return LocalInterfaces.Contains(interfaceURI);
         }
 
-        private void CompleteAgentMovement() {
-            if (OnCompleteMovementToRegion != null)
-                OnCompleteMovementToRegion(this, true);
+        private void HandleHandshakeReply(RegionHandshakeReplyPacket packet) {
+            OnRegionHandShakeReply(this);
         }
 
-        private void LogoutRequest(LogoutRequestPacket packet) {
-            if (packet.AgentData.SessionID != SessionId)
-                return;
-            OnLogout(this);
-        }
+        private void HandleMessageFromClient(ChatFromViewerPacket packet) {
+            if (OnChatFromClient != null) {
+                if (packet.AgentData.SessionID != SessionId || packet.AgentData.AgentID != AgentId)
+                    return;
 
-        private void AgentFOV(AgentFOVPacket packet) {
-            if (packet.FOVBlock.GenCounter > m_agentFOVCounter) {
-                m_agentFOVCounter = fovPacket.FOVBlock.GenCounter;
-                OnAgentFOV(this, packet.FOVBlock.VerticalAngle);
+                OSChatMessage args = new OSChatMessage();
+                args.Channel = packet.ChatData.Channel;
+                args.From = String.Empty; // ClientAvatar.firstname + " " + ClientAvatar.lastname;
+                args.Message = Utils.BytesToString(packet.ChatData.Message);
+                args.Type = (ChatTypeEnum)packet.ChatData.Type;
+                args.Position = new Vector3(); // ClientAvatar.Pos;
+                args.Scene = Scene;
+                args.Sender = this;
+                args.SenderUUID = this.AgentId;
+
+                object o;
+                if (Scene.TryGetScenePresence(AgentId, out o)) {
+                    ScenePresence sp = (ScenePresence)o;
+                    args.From = sp.Firstname + " " + sp.Lastname;
+                    args.Position = sp.AbsolutePosition;
+                }
+
+                OnChatFromClient(this, args);
             }
         }
+
+//        private void HandleCompleteAgentMovement() {
+//            if (OnCompleteMovementToRegion != null)
+//                OnCompleteMovementToRegion(this, true);
+//        }
+//
+//        private void HandleLogoutRequest(LogoutRequestPacket packet)
+//        {
+//            if (OnLogout != null) {
+//                if (packet.AgentData.SessionID != SessionId)
+//                    return;
+//                OnLogout(this);
+//            }
+//        }
+//
+//        private uint m_agentFOVCounter = 0;
+//        private void HandleAgentFOV(AgentFOVPacket packet)
+//        {
+//            if (OnAgentFOV != null) {
+//                if (packet.FOVBlock.GenCounter > m_agentFOVCounter) {
+//                    m_agentFOVCounter = packet.FOVBlock.GenCounter;
+//                    OnAgentFOV(this, packet.FOVBlock.VerticalAngle);
+//                }
+//            }
+//        }
+//
+//        private void HandleSetAlwaysRun(SetAlwaysRunPacket packet)
+//        {
+//            if (OnSetAlwaysRun != null) {
+//                if (packet.AgentData.SessionID != SessionId || packet.AgentData.AgentID != AgentId)
+//                    return;
+//                OnSetAlwaysRun(this, packet.AgentData.AlwaysRun);
+//            }
+//        }
+//
+//        private void HandleAgentSetAppearance(AgentSetAppearancePacket packet) {
+//            if (packet.AgentData.SessionID != SessionId || packet.AgentData.AgentID != AgentId)
+//                return;
+//
+//            if (OnSetAppearance != null)
+//            {
+//                // Temporarily protect ourselves from the mantis #951 failure.
+//                // However, we could do this for several other handlers where a failure isn't 
+//                // terminal for the client session anyway, in order to protect ourselves against bad 
+//                // code in plugins
+//                try
+//                {
+//                    byte[] visualparams = new byte[packet.VisualParam.Length];
+//                    for (int i = 0; i < packet.VisualParam.Length; i++)
+//                        visualparams[i] = packet.VisualParam[i].ParamValue;
+//
+//                    Primitive.TextureEntry te = null;
+//                    if (packet.ObjectData.TextureEntry.Length > 1)
+//                        te = new Primitive.TextureEntry(packet.ObjectData.TextureEntry, 0, 
+//                                                        packet.ObjectData.TextureEntry.Length);
+//
+//                    OnSetAppearance(this, te, visualparams);
+//                }
+//                catch (Exception e)
+//                {
+//                    m_log.ErrorFormat(
+//                        "[CLIENT VIEW]: AgentSetApperance packet handler threw an exception, {0}",
+//                        e);
+//                }
+//            }
+//        }
+//
+//        private AgentUpdateArgs m_lastAgentUpdateArgs;
+//        private void HandleAgentUpdate(AgentUpdatePacket packet)
+//        {
+//            if (OnAgentUpdate != null) {
+//                if (packet.AgentData.SessionID != SessionId || packet.AgentData.AgentID != AgentId)
+//                    return;
+//
+//                bool update = false;
+//                AgentUpdatePacket.AgentDataBlock x = packet.AgentData;
+//
+//                if (m_lastAgentUpdateArgs != null)
+//                {
+//                    // These should be ordered from most-likely to
+//                    // least likely to change. I've made an initial
+//                    // guess at that.
+//                    update =
+//                       (
+//                        (x.BodyRotation != m_lastAgentUpdateArgs.BodyRotation) ||
+//                        (x.CameraAtAxis != m_lastAgentUpdateArgs.CameraAtAxis) ||
+//                        (x.CameraCenter != m_lastAgentUpdateArgs.CameraCenter) ||
+//                        (x.CameraLeftAxis != m_lastAgentUpdateArgs.CameraLeftAxis) ||
+//                        (x.CameraUpAxis != m_lastAgentUpdateArgs.CameraUpAxis) ||
+//                        (x.ControlFlags != m_lastAgentUpdateArgs.ControlFlags) ||
+//                        (x.Far != m_lastAgentUpdateArgs.Far) ||
+//                        (x.Flags != m_lastAgentUpdateArgs.Flags) ||
+//                        (x.State != m_lastAgentUpdateArgs.State) ||
+//                        (x.HeadRotation != m_lastAgentUpdateArgs.HeadRotation) ||
+//                        (x.SessionID != m_lastAgentUpdateArgs.SessionID) ||
+//                        (x.AgentID != m_lastAgentUpdateArgs.AgentID)
+//                       );
+//                }
+//                else
+//                {
+//                    m_lastAgentUpdateArgs = new AgentUpdateArgs();
+//                    update = true;
+//                }
+//
+//                if (update)
+//                {
+//                    m_log.DebugFormat("[LLCLIENTVIEW]: Triggered AgentUpdate for {0}", sener.Name);
+//
+//                    m_lastAgentUpdateArgs.AgentID = x.AgentID;
+//                    m_lastAgentUpdateArgs.BodyRotation = x.BodyRotation;
+//                    m_lastAgentUpdateArgs.CameraAtAxis = x.CameraAtAxis;
+//                    m_lastAgentUpdateArgs.CameraCenter = x.CameraCenter;
+//                    m_lastAgentUpdateArgs.CameraLeftAxis = x.CameraLeftAxis;
+//                    m_lastAgentUpdateArgs.CameraUpAxis = x.CameraUpAxis;
+//                    m_lastAgentUpdateArgs.ControlFlags = x.ControlFlags;
+//                    m_lastAgentUpdateArgs.Far = x.Far;
+//                    m_lastAgentUpdateArgs.Flags = x.Flags;
+//                    m_lastAgentUpdateArgs.HeadRotation = x.HeadRotation;
+//                    m_lastAgentUpdateArgs.SessionID = x.SessionID;
+//                    m_lastAgentUpdateArgs.State = x.State;
+//
+//                    UpdateAgent handlerAgentUpdate = OnAgentUpdate;
+//                    UpdateAgent handlerPreAgentUpdate = OnPreAgentUpdate;
+//
+//                    if (handlerPreAgentUpdate != null)
+//                        OnPreAgentUpdate(this, m_lastAgentUpdateArgs);
+//
+//                    if (handlerAgentUpdate != null)
+//                        OnAgentUpdate(this, m_lastAgentUpdateArgs);
+//
+//                    handlerAgentUpdate = null;
+//                    handlerPreAgentUpdate = null;
+//                }
+//            }
+//        }
+//
+//        private void HandleAgentWearablesRequest(AgentWearablesRequestPacket packet) {
+//            if (OnRequestWearables != null)
+//                OnRequestWearables(this);
+//
+//            if (OnRequestAvatarsData != null)
+//                OnRequestAvatarsData(this);
+//        }
+//
+//        private void HandleAgentAnimation(AgentAnimationPacket packet) {
+//            if (packet.AgentData.SessionID != SessionId || packet.AgentData.AgentID != AgentId)
+//                return;
+//
+//            foreach (AgentAnimationPacket.AnimationListBlock block in packet.AnimationList) {
+//                if (OnStartAnim != null)
+//                    OnStartAnim(this, block.AnimID);
+//                if (OnStopAnim != null)
+//                    OnStopAnim(this, block.AnimID);
+//            }
+//        }
+//
+//        private void HandleAgentIsNowWearing(AgentIsNowWearingPacket packet) {
+//            if (OnAvatarNowWearing != null) {
+//                if (packet.AgentData.SessionID != SessionId || packet.AgentData.AgentID != AgentId)
+//                    return;
+//
+//                AvatarWearingArgs wearingArgs = new AvatarWearingArgs();
+//                for (int i = 0; i < packet.WearableData.Length; i++)
+//                {
+//                    AvatarWearingArgs.Wearable wearable =
+//                        new AvatarWearingArgs.Wearable(packet.WearableData[i].ItemID,
+//                                                       packet.WearableData[i].WearableType);
+//                    wearingArgs.NowWearing.Add(wearable);
+//                }
+//
+//                OnAvatarNowWearing(this, wearingArgs);
+//            }
+//        }
+//
+//        private int HandlePingCheck(int id) {
+//            return id;
+//        }
         #endregion
+
+        class KIARAInterface {
+            public string URI { get; private set; }
+            public bool Required { get; private set; }
+            public List<string> Functions { get; private set; }
+
+            public KIARAInterface(string uri, bool required, params string[] functions) {
+                URI = uri;
+                Required = required;
+                Functions = new List<string>();
+                foreach (string function in functions)
+                    Functions.Add(function);
+            }
+        }
 
         private void ConfigureInterfaces()
         {
-            // Prepare configuration data.
-            string[] localInterfaces = {
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/viewer.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/agentsServer.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/systemServer.kiara",
-            };
-
             Dictionary<string, Delegate> localFunctions = new Dictionary<string, Delegate>
             {
-                {"omp.interface.implements", (Func<string, bool>)InterfaceImplements},
-                {"omp.connect.completeAgentMovement", (Action)CompleteAgentMovement},
-                {"omp.connect.logoutRequest", (Action<LogoutRequestPacket>)LogoutRequest},
-                {"omp.viewer.agentFOV", (Action<AgentFOVPacket>)AgentFOV},
-                {"omp.viewer.setAlwaysRun", },
-                {"omp.viewer.agentHeightWidth", },
-                {"omp.agents.agentSetAppearance", },
-                {"omp.agents.agentUpdate", },
-                {"omp.agents.agentWearablesRequest", },
-                {"omp.agents.agentAnimation", },
-                {"omp.agents.agentIsNowWearing", },
-                {"omp.system.agentThrottle", },
-                {"omp.system.startPingCheck", },
-
+                {"omp.interface.implements", (Func<string, bool>)HandleInterfaceImplements},
+                {"omp.connectServer.handshakeReply", 
+                    (Action<RegionHandshakeReplyPacket>)HandleHandshakeReply},
+                {"omp.chatServer.messageFromClient", 
+                    (Action<ChatFromViewerPacket>)HandleMessageFromClient},
+//                {"omp.connect.completeAgentMovement", (Action)HandleCompleteAgentMovement},
+//                {"omp.connect.logoutRequest", (Action<LogoutRequestPacket>)HandleLogoutRequest},
+//                {"omp.viewer.agentFOV", (Action<AgentFOVPacket>)HandleAgentFOV},
+//                {"omp.viewer.setAlwaysRun", (Action<SetAlwaysRunPacket>)HandleSetAlwaysRun},
+//                {"omp.agents.agentSetAppearanceXML3D", 
+//                    (Action<AgentSetAppearancePacket>)HandleAgentSetAppearance},
+//                {"omp.agents.agentUpdate", (Action<AgentUpdatePacket>)HandleAgentUpdate},
+//                {"omp.agents.agentWearablesRequest", 
+//                    (Action<AgentWearablesRequestPacket>)HandleAgentWearablesRequest},
+//                {"omp.agents.agentAnimation", (Action<AgentAnimationPacket>)HandleAgentAnimation},
+//                {"omp.agents.agentIsNowWearing", 
+//                    (Action<AgentIsNowWearingPacket>)HandleAgentIsNowWearing},
+//                {"omp.system.pingCheck", (Func<int, int>)HandlePingCheck},
             };
 
-            string[] remoteInterfaces = 
-            { 
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectClient.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/agentsClient.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/objects.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/environment.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/systemClient.kiara",
-            };
 
-            string[] remoteFunctions = 
+            KIARAInterface[] remoteInterfaces = 
             { 
-                "omp.interface.implements",
-                "omp.connect.regionHandshake",
-                "omp.connect.agentMovementComplete",
-                "omp.connect.logoutResponse",
-                "omp.agents.avatarAppearance",
-                "omp.agents.avatarAnimation",
-                "omp.agents.coarseLocationUpdate",
-                "omp.agents.agentWearablesUpdate",
-                "omp.objects.improvedTerseObjectUpdate",
-                "omp.objects.objectUpdate",
-                "omp.objects.killObject",
-                "omp.environment.layerData",
-                "omp.environment.simStats",
-                "omp.environment.simulatorViewerTimeMessage",
-                "omp.system.startPingCheck",
+                new KIARAInterface(
+                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara", 
+                    true, "omp.interface.implements"),
+                new KIARAInterface(
+                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectClient.kiara",
+                    true, "omp.connectClient.handshake"),
+                new KIARAInterface(
+                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/chatClient.kiara",
+                    false, "omp.chatClient.messageFromServer"),
             };
 
             // Set up server interfaces.
-            foreach (string supportedInterface in localInterfaces) {
-                m_SupportedInterfaces.Add(supportedInterface);
-                m_Connection.LoadIDL(supportedInterface);
-            }
+            foreach (string supportedInterface in LocalInterfaces)
+                m_connection.LoadIDL(supportedInterface);
 
             // Set up server functions.
             foreach (KeyValuePair<string, Delegate> localFunction in localFunctions) {
-                m_Connection.RegisterFuncImplementation(localFunction.Key, "...",
+                m_connection.RegisterFuncImplementation(localFunction.Key, "...",
                                                         localFunction.Value);
             }
             
@@ -155,44 +346,48 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             int loadedInterfaces = 0;
             bool failedToLoad = false;
 
-            Action<string, string> errorCallback = delegate(string interfaceName, string reason) {
+            Action<KIARAInterface, string> errorCallback = 
+                delegate(KIARAInterface ki, string reason) {
+                    if (!ki.Required)
+                        return;
+                    if (failedToLoad)
+                        return;
+                    failedToLoad = true;
+                    m_server.RemoveClient(this);
+                    m_log.Error("Failed to acquire '" + ki.URI + "' interface - " + reason);
+                };
+
+            Action<KIARAInterface, Exception> excCallback = 
+                delegate(KIARAInterface ki, Exception exception) {
+                    errorCallback(ki, "exception returned by the client");
+                };
+
+            Action<KIARAInterface, bool> resultCallback = delegate(KIARAInterface ki, bool result) {
                 if (failedToLoad)
                     return;
-                failedToLoad = true;
-                m_Server.RemoveClient(this);
-                m_Log.Error("Failed to acquire '" + interfaceName + "' interface - " + reason);
-            };
 
-            Action<string, Exception> excCallback = delegate(string interfaceName, 
-                                                                   Exception exception) {
-                errorCallback(interfaceName, "exception returned by the client");
-            };
+                if (!result && ki.Required) 
+                    errorCallback(ki, "not supported by the client");
+                else if (result) {
+                    // Set up client functions.
+                    foreach (string func in ki.Functions)
+                        m_functions[func] = m_connection.GenerateFunctionWrapper(func, "...");
+                    m_remoteInterfaces.Add(ki.URI);
 
-            Action<string, bool> resultCallback = delegate(string interfaceName, bool result) {
-                if (failedToLoad)
-                    return;
-
-                if (!result) 
-                    errorCallback(interfaceName, "not supported by the client");
-                else {
                     loadedInterfaces += 1;
-                    if (loadedInterfaces == numInterfaces) {
-                        // Set up client functions.
-                        foreach (string func in remoteFunctions)
-                            m_Functions[func] = m_Connection.GenerateFunctionWrapper(func, "...");
-                        m_Server.AddSceneClient(this);
-                    }
+                    if (loadedInterfaces == numInterfaces)
+                        m_server.AddSceneClient(this);
                 }
             };
 
             FunctionWrapper implements = 
-                m_Connection.GenerateFunctionWrapper("omp.interface.implements", "...");
-            foreach (string interfaceName in remoteInterfaces) {
-                implements(interfaceName)
-                    .On("error", 
-                        (CallErrorCallback)((reason) => errorCallback(interfaceName, reason)))
-                    .On("result", (Action<bool>)((result) => resultCallback(interfaceName, result)))
-                    .On("exception", (Action<Exception>)((exc) => excCallback(interfaceName, exc)));
+                m_connection.GenerateFunctionWrapper("omp.interface.implements", "...");
+            foreach (KIARAInterface ki in remoteInterfaces) {
+                KIARAInterface ki_copy = ki;
+                implements(ki.URI)
+                    .On("error", (CallErrorCallback)((reason) => errorCallback(ki_copy, reason)))
+                    .On("result", (Action<bool>)((result) => resultCallback(ki_copy, result)))
+                    .On("exception", (Action<Exception>)((exc) => excCallback(ki_copy, exc)));
             }
         }
         #endregion
@@ -698,6 +893,8 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public event PlacesQuery OnPlacesQuery;
 
+//        public event AgentFOV OnAgentFOV;
+
         public event FindAgentUpdate OnFindAgent;
 
         public event TrackAgentUpdate OnTrackAgent;
@@ -843,16 +1040,26 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             handshake.RegionInfo3.ProductSKU = Utils.EmptyBytes;
             handshake.RegionInfo4 = new RegionHandshakePacket.RegionInfo4Block[0];
 
-            Call("omp.connect.regionHandshake", handshake).On("result",
-                (Action<RegionHandshakeReplyPacket>) delegate(RegionHandshakeReplyPacket reply) {
-                    OnRegionHandShakeReply(this);
-                }
-            );
+            Call("omp.connectClient.handshake", handshake);
         }
 
-        public void SendChatMessage(string message, byte type, OpenMetaverse.Vector3 fromPos, string fromName, OpenMetaverse.UUID fromAgentID, OpenMetaverse.UUID ownerID, byte source, byte audible)
+        public void SendChatMessage(string message, byte type, OpenMetaverse.Vector3 fromPos, 
+                                    string fromName, OpenMetaverse.UUID fromAgentID, 
+                                    OpenMetaverse.UUID ownerID, byte source, byte audible)
         {
-            return; /* TODO(rryk): Implement */
+            if (HasRemoteInterface("http://yellow.cg.uni-saarland.de/home/kiara/idl/chatClient.kiara")) {
+                ChatFromSimulatorPacket packet = new ChatFromSimulatorPacket();
+                packet.ChatData.Audible = audible;
+                packet.ChatData.Message = Util.StringToBytes1024(message);
+                packet.ChatData.ChatType = type;
+                packet.ChatData.SourceType = source;
+                packet.ChatData.Position = fromPos;
+                packet.ChatData.FromName = Util.StringToBytes256(fromName);
+                packet.ChatData.OwnerID = ownerID;
+                packet.ChatData.SourceID = fromAgentID;
+
+                Call("omp.chatClient.messageFromServer", packet);
+            }
         }
 
         public void SendInstantMessage(GridInstantMessage im)
@@ -892,7 +1099,24 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public void MoveAgentIntoRegion(RegionInfo regInfo, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 look)
         {
-            return; /* TODO(rryk): Implement */
+            AgentMovementCompletePacket mov = new AgentMovementCompletePacket();
+            mov.SimData.ChannelVersion = Util.StringToBytes256(Scene.GetSimulatorVersion());
+            mov.AgentData.SessionID = SessionId;
+            mov.AgentData.AgentID = AgentId;
+            mov.Data.RegionHandle = regInfo.RegionHandle;
+            mov.Data.Timestamp = (uint)Util.UnixTimeSinceEpoch();
+
+            if ((pos.X == 0) && (pos.Y == 0) && (pos.Z == 0))
+            {
+                mov.Data.Position = StartPos;
+            }
+            else
+            {
+                mov.Data.Position = pos;
+            }
+            mov.Data.LookAt = look;
+
+            Call("omp.connect.agentMovementComplete", mov);
         }
 
         public void InformClientOfNeighbour(ulong neighbourHandle, System.Net.IPEndPoint neighbourExternalEndPoint)

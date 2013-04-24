@@ -10,6 +10,10 @@ namespace KIARA
     public partial class Connection
     {
         #region Public interface
+        // Event that is raised when connection is raised. The |reason| for closing is passed.
+        public delegate void CloseDelegate(string reason);
+        public event CloseDelegate OnClose;
+
         // Loads an IDL file from the |uri|. Parses it's content and adds new types and services to 
         // the type system. When called on a |uri| that was already loaded, does not raise an error.
         public void LoadIDL(string uri)
@@ -72,6 +76,7 @@ namespace KIARA
         #region Private implementation
         internal interface IImplementation
         {
+            event CloseDelegate OnClose;
             void LoadIDL(string uri);
             FunctionWrapper GenerateFuncWrapper(string qualifiedMethodName, string typeMapping,
                                                 Dictionary<string, Delegate> defaultHandlers);

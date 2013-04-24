@@ -88,7 +88,8 @@ namespace KIARA
                     throw new Error(ErrorCode.INVALID_ARGUMENT,
                         "Argument for 'error' event must be a string");
                 }
-                OnError((string)argument);
+                if (OnError != null)
+                    OnError((string)argument);
             }
             else
                 throw new Error(ErrorCode.INVALID_ARGUMENT, "Invalid event name: " + eventName);

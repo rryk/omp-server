@@ -37,6 +37,7 @@ using System.Net;
 using System.Reflection;
 using System;
 using OpenMetaverse;
+using OpenSim.Region.Framework.Scenes;
 
 namespace OpenSim.Region.ClientStack.OMP.WebSocket
 {
@@ -87,6 +88,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         internal void RemoveClient(Client client)
         {
             m_clients.Remove(client);
+            object scenePresence;
+            if (m_scene.TryGetScenePresence(client.AgentId, out scenePresence))
+                m_scene.RemoveClient(client.AgentId, true);
         }
 
         internal void AddSceneClient(IClientAPI client)
@@ -124,7 +128,10 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             public void Listen()
             {
               m_handler.OnText += (sender, text) => OnMessage(text.Data);
-              m_handler.OnClose += (sender, data) => OnClose();
+              m_handler.OnClose += delegate(object sender, CloseEventArgs closedata) {
+                if (OnClose != null)
+                  OnClose();
+              };
               m_handler.OnUpgradeFailed += (sender, data) => OnError("Upgrade failed.");
               m_handler.HandshakeAndUpgrade();
             }
@@ -134,11 +141,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         private static bool InterfaceImplements(string interfaceURI) 
         {
-            string[] supportedInterfaces = {
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectInit.kiara"
-            };
-            return Array.IndexOf(supportedInterfaces, interfaceURI) != -1;
+            if (interfaceURI == "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectInit.kiara")
+                return true;
+            return Client.LocalInterfaces.Contains(interfaceURI);
         }
 
         void ConnectUseCircuitCode(Connection conn, IPEndPoint remoteEndPoint, uint code, 
@@ -148,7 +153,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             m_circuitManager.AuthenticateSession(new UUID(sessionID), new UUID(agentID), code);
             if (authResponse.Authorised) 
             {
-                m_clients.Add(new Client(this, m_scene, conn, authResponse, code, remoteEndPoint));
+                Client c = new Client(this, m_scene, conn, authResponse, code, remoteEndPoint);
+                m_clients.Add(c);
+                conn.OnClose += (reason) => RemoveClient(c);
             }
         }
         
@@ -158,7 +165,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             conn.LoadIDL("http://yellow.cg.uni-saarland.de/home/kiara/idl/connectInit.kiara");
             conn.RegisterFuncImplementation("omp.interface.implements", "...",
                 (Func<string, bool>)InterfaceImplements);
-            conn.RegisterFuncImplementation("omp.connect.useCircuitCode", "...",
+            conn.RegisterFuncImplementation("omp.connectInit.useCircuitCode", "...",
                 (Action<UInt32, string, string>)((code, agentID, sessionID) => 
                   ConnectUseCircuitCode(conn, handler.RemoteIPEndpoint, code, agentID, sessionID)));
         }
