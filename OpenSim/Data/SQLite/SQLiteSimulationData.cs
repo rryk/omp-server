@@ -1288,6 +1288,7 @@ namespace OpenSim.Data.SQLite
             createCol(shapes, "Texture", typeof(Byte[]));
             createCol(shapes, "ExtraParams", typeof(Byte[]));
             createCol(shapes, "Media", typeof(String));
+            createCol(shapes, "XML3D", typeof(String));
 
             shapes.PrimaryKey = new DataColumn[] { shapes.Columns["UUID"] };
 
@@ -2427,6 +2428,8 @@ namespace OpenSim.Data.SQLite
 
             if (!(row["Media"] is System.DBNull))
                 s.Media = PrimitiveBaseShape.MediaList.FromXml((string)row["Media"]);
+
+            s.XML3D = (string)row["XML3D"];
                         
             return s;
         }
@@ -2474,6 +2477,8 @@ namespace OpenSim.Data.SQLite
 
             if (s.Media != null)
                 row["Media"] = s.Media.ToXml();
+
+            row["XML3D"] = s.XML3D;
         }
 
         /// <summary>

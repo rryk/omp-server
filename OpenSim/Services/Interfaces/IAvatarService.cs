@@ -179,6 +179,8 @@ namespace OpenSim.Services.Interfaces
                 if (attach.ItemID != UUID.Zero)
                     Data["_ap_" + attach.AttachPoint] = attach.ItemID.ToString();
             }
+
+            Data["XML"] = appearance.XML3D;
         }
 
         public AvatarAppearance ToAvatarAppearance()
@@ -273,6 +275,9 @@ namespace OpenSim.Services.Interfaces
                     
                     appearance.VisualParams = binary;
                 }
+
+                if (Data.ContainsKey("XML3D"))
+                    appearance.XML3D = Data["XML3D"];
 
                 // New style wearables
                 foreach (KeyValuePair<string, string> _kvp in Data)
