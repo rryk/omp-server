@@ -91,7 +91,20 @@ namespace KIARA {
 
         private bool IsOneWay(string qualifiedMethodName)
         {
-            return qualifiedMethodName == "omp.connect.handshake";
+            List<string> onewayMethods = new List<string>{
+                "omp.connectClient.handshake",
+                "omp.connectInit.useCircuitCode",
+                "omp.connectServer.handshakeReply",
+                "omp.objectSync.updateObject",
+                "omp.objectSync.deleteObject",
+                "omp.objectSync.locationUpdate",
+                "omp.movement.updateAvatarLocation",
+                "omp.movement.updateAvatarMovement",
+                "omp.chatServer.messageFromClient",
+                "omp.chatClient.messageFromServer",
+                "omp.animationServer.startAnimation"
+            };
+            return onewayMethods.Contains(qualifiedMethodName);
         }
 
         private void HandleMessage(string message)

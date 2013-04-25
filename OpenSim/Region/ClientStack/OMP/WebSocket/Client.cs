@@ -59,10 +59,6 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             }
         }
 
-        private bool HasRemoteInterface(string uri) {
-            return m_remoteInterfaces.Contains(uri);
-        }
-
         #region Incoming message handlers
         private bool HandleInterfaceImplements(string interfaceURI)
         {
@@ -319,14 +315,19 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             KIARAInterface[] remoteInterfaces = 
             { 
                 new KIARAInterface(
-                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara", 
-                    true, "omp.interface.implements"),
+                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara", true, 
+                    "omp.interface.implements"),
                 new KIARAInterface(
-                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectClient.kiara",
-                    true, "omp.connectClient.handshake"),
+                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectClient.kiara", true, 
+                    "omp.connectClient.handshake"),
                 new KIARAInterface(
-                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/chatClient.kiara",
-                    false, "omp.chatClient.messageFromServer"),
+                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/chatClient.kiara", false, 
+                    "omp.chatClient.messageFromServer"),
+                new KIARAInterface(
+                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/objectSync.kiara", false, 
+                    "omp.objectSync.createObject", 
+                    "omp.objectSync.deleteObject", 
+                    "omp.objectSync.locationUpdate")
             };
 
             // Set up server interfaces.
@@ -343,7 +344,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             // TODO(rryk): Not sure if callbacks may be executed in several threads at the same 
             // time - perhaps we need a mutex for loadedInterfaces and failedToLoad.
             int numInterfaces = remoteInterfaces.Length;
-            int loadedInterfaces = 0;
+            int checkedInterfaces = 0;
             bool failedToLoad = false;
 
             Action<KIARAInterface, string> errorCallback = 
@@ -368,14 +369,16 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
                 if (!result && ki.Required) 
                     errorCallback(ki, "not supported by the client");
-                else if (result) {
+                else {
                     // Set up client functions.
-                    foreach (string func in ki.Functions)
-                        m_functions[func] = m_connection.GenerateFunctionWrapper(func, "...");
-                    m_remoteInterfaces.Add(ki.URI);
+                    if (result) {
+                        foreach (string func in ki.Functions)
+                            m_functions[func] = m_connection.GenerateFunctionWrapper(func, "...");
+                        m_remoteInterfaces.Add(ki.URI);
+                    }
 
-                    loadedInterfaces += 1;
-                    if (loadedInterfaces == numInterfaces)
+                    checkedInterfaces += 1;
+                    if (checkedInterfaces == numInterfaces)
                         m_server.AddSceneClient(this);
                 }
             };
@@ -393,6 +396,141 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         #endregion
 
         #region IClientAPI implementation
+         private bool ClientSupports(string shortInterfaceName) {
+            return m_remoteInterfaces.Contains(
+                "http://yellow.cg.uni-saarland.de/home/kiara/idl/" + shortInterfaceName + ".kiara");
+        }
+
+        public void SendRegionHandshake(RegionInfo regionInfo, RegionHandshakeArgs args)
+        {
+            RegionHandshakePacket handshake = new RegionHandshakePacket();
+            handshake.RegionInfo = new RegionHandshakePacket.RegionInfoBlock();
+            handshake.RegionInfo.BillableFactor = args.billableFactor;
+            handshake.RegionInfo.IsEstateManager = args.isEstateManager;
+            handshake.RegionInfo.TerrainHeightRange00 = args.terrainHeightRange0;
+            handshake.RegionInfo.TerrainHeightRange01 = args.terrainHeightRange1;
+            handshake.RegionInfo.TerrainHeightRange10 = args.terrainHeightRange2;
+            handshake.RegionInfo.TerrainHeightRange11 = args.terrainHeightRange3;
+            handshake.RegionInfo.TerrainStartHeight00 = args.terrainStartHeight0;
+            handshake.RegionInfo.TerrainStartHeight01 = args.terrainStartHeight1;
+            handshake.RegionInfo.TerrainStartHeight10 = args.terrainStartHeight2;
+            handshake.RegionInfo.TerrainStartHeight11 = args.terrainStartHeight3;
+            handshake.RegionInfo.SimAccess = args.simAccess;
+            handshake.RegionInfo.WaterHeight = args.waterHeight;
+
+            handshake.RegionInfo.RegionFlags = args.regionFlags;
+            handshake.RegionInfo.SimName = Util.StringToBytes256(args.regionName);
+            handshake.RegionInfo.SimOwner = args.SimOwner;
+            handshake.RegionInfo.TerrainBase0 = args.terrainBase0;
+            handshake.RegionInfo.TerrainBase1 = args.terrainBase1;
+            handshake.RegionInfo.TerrainBase2 = args.terrainBase2;
+            handshake.RegionInfo.TerrainBase3 = args.terrainBase3;
+            handshake.RegionInfo.TerrainDetail0 = args.terrainDetail0;
+            handshake.RegionInfo.TerrainDetail1 = args.terrainDetail1;
+            handshake.RegionInfo.TerrainDetail2 = args.terrainDetail2;
+            handshake.RegionInfo.TerrainDetail3 = args.terrainDetail3;
+            // I guess this is for the client to remember an old setting?
+            handshake.RegionInfo.CacheID = UUID.Random();
+            handshake.RegionInfo2 = new RegionHandshakePacket.RegionInfo2Block();
+            handshake.RegionInfo2.RegionID = regionInfo.RegionID;
+
+            handshake.RegionInfo3 = new RegionHandshakePacket.RegionInfo3Block();
+            handshake.RegionInfo3.CPUClassID = 9;
+            handshake.RegionInfo3.CPURatio = 1;
+
+            handshake.RegionInfo3.ColoName = Utils.EmptyBytes;
+            handshake.RegionInfo3.ProductName = Util.StringToBytes256(regionInfo.RegionType);
+            handshake.RegionInfo3.ProductSKU = Utils.EmptyBytes;
+            handshake.RegionInfo4 = new RegionHandshakePacket.RegionInfo4Block[0];
+
+            Call("omp.connectClient.handshake", handshake);
+        }
+
+        public void SendChatMessage(string message, byte type, OpenMetaverse.Vector3 fromPos, 
+                                    string fromName, OpenMetaverse.UUID fromAgentID, 
+                                    OpenMetaverse.UUID ownerID, byte source, byte audible)
+        {
+            if (ClientSupports("chatClient")) {
+                ChatFromSimulatorPacket packet = new ChatFromSimulatorPacket();
+                packet.ChatData.Audible = audible;
+                packet.ChatData.Message = Util.StringToBytes1024(message);
+                packet.ChatData.ChatType = type;
+                packet.ChatData.SourceType = source;
+                packet.ChatData.Position = fromPos;
+                packet.ChatData.FromName = Util.StringToBytes256(fromName);
+                packet.ChatData.OwnerID = ownerID;
+                packet.ChatData.SourceID = fromAgentID;
+
+                Call("omp.chatClient.messageFromServer", packet);
+            }
+        }
+
+        public void SendKillObject(ulong regionHandle, List<uint> localID)
+        {
+            if (ClientSupports("objectSync")) {
+                foreach (uint id in localID)
+                    Call("omp.objectSync.deleteObject", id);
+            }
+        }
+
+        public void SendAvatarDataImmediate(ISceneEntity avatar)
+        {
+            SendEntityUpdate(avatar, PrimUpdateFlags.FullUpdate);
+        }
+
+        private List<uint> m_createdObjects = new List<uint>();
+        public void SendEntityUpdate(ISceneEntity entity, PrimUpdateFlags updateFlags)
+        {
+            bool newObject = !m_createdObjects.Contains(entity.LocalId);
+            if (newObject)
+                m_createdObjects.Add(entity.LocalId);
+
+            if (ClientSupports("objectSync")) {
+                if (entity is ScenePresence) {
+                    ScenePresence presence = entity as ScenePresence;
+                    if (newObject) {
+                        Call("omp.objectSync.createObject", entity.LocalId,
+                             presence.Appearance.XML3D);
+                    }
+                    Call("omp.objectSync.locationUpdate", entity.LocalId, presence.AbsolutePosition, 
+                         presence.Rotation, new Vector3(1, 1, 1));
+                } else if (entity is SceneObjectPart) {
+                    SceneObjectPart objPart = entity as SceneObjectPart;
+                    if (newObject) {
+                        Call("omp.objectSync.createObject", entity.LocalId,
+                             objPart.Shape.XML3D);
+                    }
+                    Call("omp.objectSync.locationUpdate", entity.LocalId, objPart.AbsolutePosition, 
+                         objPart.GetWorldRotation(), objPart.Scale);
+                }
+            }
+        }
+
+        public AgentCircuitData RequestClientInfo()
+        {
+            AgentCircuitData agentData = new AgentCircuitData();
+            agentData.AgentID = AgentId;
+            agentData.SessionID = SessionId;
+            agentData.SecureSessionID = SecureSessionId;
+            agentData.circuitcode = CircuitCode;
+            agentData.child = false;
+            agentData.firstname = FirstName;
+            agentData.lastname = LastName;
+
+            ICapabilitiesModule capsModule = Scene.RequestModuleInterface<ICapabilitiesModule>();
+
+            if (capsModule == null) // can happen when shutting down.
+                return agentData;
+
+            agentData.CapsPath = capsModule.GetCapsPath(AgentId);
+            agentData.ChildrenCapSeeds = new Dictionary<ulong, string>(
+                capsModule.GetChildrenSeeds(AgentId));
+
+            return agentData;
+        }
+        #endregion
+
+        #region IClientAPI stubs
         private int m_animationSequenceNumber = 1;
 
         public OpenMetaverse.Vector3 StartPos
@@ -988,78 +1126,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             return; /* TODO(rryk): Implement */
         }
 
-        public void SendKillObject(ulong regionHandle, List<uint> localID)
-        {
-            return; /* TODO(rryk): Implement */
-        }
-
         public void SendAnimations(OpenMetaverse.UUID[] animID, int[] seqs, OpenMetaverse.UUID sourceAgentId, OpenMetaverse.UUID[] objectIDs)
         {
             return; /* TODO(rryk): Implement */
-        }
-
-        public void SendRegionHandshake(RegionInfo regionInfo, RegionHandshakeArgs args)
-        {
-            RegionHandshakePacket handshake = new RegionHandshakePacket();
-            handshake.RegionInfo = new RegionHandshakePacket.RegionInfoBlock();
-            handshake.RegionInfo.BillableFactor = args.billableFactor;
-            handshake.RegionInfo.IsEstateManager = args.isEstateManager;
-            handshake.RegionInfo.TerrainHeightRange00 = args.terrainHeightRange0;
-            handshake.RegionInfo.TerrainHeightRange01 = args.terrainHeightRange1;
-            handshake.RegionInfo.TerrainHeightRange10 = args.terrainHeightRange2;
-            handshake.RegionInfo.TerrainHeightRange11 = args.terrainHeightRange3;
-            handshake.RegionInfo.TerrainStartHeight00 = args.terrainStartHeight0;
-            handshake.RegionInfo.TerrainStartHeight01 = args.terrainStartHeight1;
-            handshake.RegionInfo.TerrainStartHeight10 = args.terrainStartHeight2;
-            handshake.RegionInfo.TerrainStartHeight11 = args.terrainStartHeight3;
-            handshake.RegionInfo.SimAccess = args.simAccess;
-            handshake.RegionInfo.WaterHeight = args.waterHeight;
-
-            handshake.RegionInfo.RegionFlags = args.regionFlags;
-            handshake.RegionInfo.SimName = Util.StringToBytes256(args.regionName);
-            handshake.RegionInfo.SimOwner = args.SimOwner;
-            handshake.RegionInfo.TerrainBase0 = args.terrainBase0;
-            handshake.RegionInfo.TerrainBase1 = args.terrainBase1;
-            handshake.RegionInfo.TerrainBase2 = args.terrainBase2;
-            handshake.RegionInfo.TerrainBase3 = args.terrainBase3;
-            handshake.RegionInfo.TerrainDetail0 = args.terrainDetail0;
-            handshake.RegionInfo.TerrainDetail1 = args.terrainDetail1;
-            handshake.RegionInfo.TerrainDetail2 = args.terrainDetail2;
-            handshake.RegionInfo.TerrainDetail3 = args.terrainDetail3;
-            // I guess this is for the client to remember an old setting?
-            handshake.RegionInfo.CacheID = UUID.Random();
-            handshake.RegionInfo2 = new RegionHandshakePacket.RegionInfo2Block();
-            handshake.RegionInfo2.RegionID = regionInfo.RegionID;
-
-            handshake.RegionInfo3 = new RegionHandshakePacket.RegionInfo3Block();
-            handshake.RegionInfo3.CPUClassID = 9;
-            handshake.RegionInfo3.CPURatio = 1;
-
-            handshake.RegionInfo3.ColoName = Utils.EmptyBytes;
-            handshake.RegionInfo3.ProductName = Util.StringToBytes256(regionInfo.RegionType);
-            handshake.RegionInfo3.ProductSKU = Utils.EmptyBytes;
-            handshake.RegionInfo4 = new RegionHandshakePacket.RegionInfo4Block[0];
-
-            Call("omp.connectClient.handshake", handshake);
-        }
-
-        public void SendChatMessage(string message, byte type, OpenMetaverse.Vector3 fromPos, 
-                                    string fromName, OpenMetaverse.UUID fromAgentID, 
-                                    OpenMetaverse.UUID ownerID, byte source, byte audible)
-        {
-            if (HasRemoteInterface("http://yellow.cg.uni-saarland.de/home/kiara/idl/chatClient.kiara")) {
-                ChatFromSimulatorPacket packet = new ChatFromSimulatorPacket();
-                packet.ChatData.Audible = audible;
-                packet.ChatData.Message = Util.StringToBytes1024(message);
-                packet.ChatData.ChatType = type;
-                packet.ChatData.SourceType = source;
-                packet.ChatData.Position = fromPos;
-                packet.ChatData.FromName = Util.StringToBytes256(fromName);
-                packet.ChatData.OwnerID = ownerID;
-                packet.ChatData.SourceID = fromAgentID;
-
-                Call("omp.chatClient.messageFromServer", packet);
-            }
         }
 
         public void SendInstantMessage(GridInstantMessage im)
@@ -1097,54 +1166,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             return; /* TODO(rryk): Implement */
         }
 
-        public void MoveAgentIntoRegion(RegionInfo regInfo, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 look)
-        {
-            AgentMovementCompletePacket mov = new AgentMovementCompletePacket();
-            mov.SimData.ChannelVersion = Util.StringToBytes256(Scene.GetSimulatorVersion());
-            mov.AgentData.SessionID = SessionId;
-            mov.AgentData.AgentID = AgentId;
-            mov.Data.RegionHandle = regInfo.RegionHandle;
-            mov.Data.Timestamp = (uint)Util.UnixTimeSinceEpoch();
-
-            if ((pos.X == 0) && (pos.Y == 0) && (pos.Z == 0))
-            {
-                mov.Data.Position = StartPos;
-            }
-            else
-            {
-                mov.Data.Position = pos;
-            }
-            mov.Data.LookAt = look;
-
-            Call("omp.connect.agentMovementComplete", mov);
-        }
-
         public void InformClientOfNeighbour(ulong neighbourHandle, System.Net.IPEndPoint neighbourExternalEndPoint)
         {
             return; /* TODO(rryk): Implement */
-        }
-
-        public AgentCircuitData RequestClientInfo()
-        {
-            AgentCircuitData agentData = new AgentCircuitData();
-            agentData.AgentID = AgentId;
-            agentData.SessionID = SessionId;
-            agentData.SecureSessionID = SecureSessionId;
-            agentData.circuitcode = CircuitCode;
-            agentData.child = false;
-            agentData.firstname = FirstName;
-            agentData.lastname = LastName;
-
-            ICapabilitiesModule capsModule = Scene.RequestModuleInterface<ICapabilitiesModule>();
-
-            if (capsModule == null) // can happen when shutting down.
-                return agentData;
-
-            agentData.CapsPath = capsModule.GetCapsPath(AgentId);
-            agentData.ChildrenCapSeeds = new Dictionary<ulong, string>(
-                capsModule.GetChildrenSeeds(AgentId));
-
-            return agentData;
         }
 
         public void CrossRegion(ulong newRegionHandle, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 lookAt, System.Net.IPEndPoint newRegionExternalEndPoint, string capsURL)
@@ -1164,6 +1188,29 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public void SendRegionTeleport(ulong regionHandle, byte simAccess, System.Net.IPEndPoint regionExternalEndPoint, uint locationID, uint flags, string capsURL)
         {
+            return; /* TODO(rryk): Implement */
+        }
+
+        public void MoveAgentIntoRegion(RegionInfo regInfo, OpenMetaverse.Vector3 pos, OpenMetaverse.Vector3 look)
+        {
+//            AgentMovementCompletePacket mov = new AgentMovementCompletePacket();
+//            mov.SimData.ChannelVersion = Util.StringToBytes256(Scene.GetSimulatorVersion());
+//            mov.AgentData.SessionID = SessionId;
+//            mov.AgentData.AgentID = AgentId;
+//            mov.Data.RegionHandle = regInfo.RegionHandle;
+//            mov.Data.Timestamp = (uint)Util.UnixTimeSinceEpoch();
+//
+//            if ((pos.X == 0) && (pos.Y == 0) && (pos.Z == 0))
+//            {
+//                mov.Data.Position = StartPos;
+//            }
+//            else
+//            {
+//                mov.Data.Position = pos;
+//            }
+//            mov.Data.LookAt = look;
+//
+//            Call("omp.connect.agentMovementComplete", mov);
             return; /* TODO(rryk): Implement */
         }
 
@@ -1198,16 +1245,6 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         }
 
         public void SetChildAgentThrottle(byte[] throttle)
-        {
-            return; /* TODO(rryk): Implement */
-        }
-
-        public void SendAvatarDataImmediate(ISceneEntity avatar)
-        {
-            return; /* TODO(rryk): Implement */
-        }
-
-        public void SendEntityUpdate(ISceneEntity entity, PrimUpdateFlags updateFlags)
         {
             return; /* TODO(rryk): Implement */
         }
