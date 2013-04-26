@@ -151,12 +151,8 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         {
             AuthenticateResponse authResponse =
             m_circuitManager.AuthenticateSession(new UUID(sessionID), new UUID(agentID), code);
-            if (authResponse.Authorised) 
-            {
-                Client c = new Client(this, m_scene, conn, authResponse, code, remoteEndPoint);
-                m_clients.Add(c);
-                conn.OnClose += (reason) => RemoveClient(c);
-            }
+            if (authResponse.Authorised)
+                m_clients.Add(new Client(this, m_scene, conn, authResponse, code, remoteEndPoint));
         }
         
         private void HandleNewClient(string servicepath, WebSocketHttpServerHandler handler) {

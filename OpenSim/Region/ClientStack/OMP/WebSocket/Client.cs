@@ -30,6 +30,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             RemoteEndPoint = remoteEndPoint;
             IsActive = true;
 
+            // Remove oneself from the scene when connection breaks.
+            connection.OnClose += (reason) => server.RemoveClient(this);
+
             ConfigureInterfaces();
         }
 
@@ -379,7 +382,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
                     checkedInterfaces += 1;
                     if (checkedInterfaces == numInterfaces)
-                        m_server.AddSceneClient(this);
+                        Start();
                 }
             };
 
@@ -467,10 +470,8 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
         public void SendKillObject(ulong regionHandle, List<uint> localID)
         {
-            if (ClientSupports("objectSync")) {
-                foreach (uint id in localID)
-                    Call("omp.objectSync.deleteObject", id);
-            }
+            if (ClientSupports("objectSync"))
+                Call("omp.objectSync.deleteObject", localID);
         }
 
         public void SendAvatarDataImmediate(ISceneEntity avatar)
@@ -481,6 +482,8 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         private List<uint> m_createdObjects = new List<uint>();
         public void SendEntityUpdate(ISceneEntity entity, PrimUpdateFlags updateFlags)
         {
+            // FIXME: This does not allow updating the object when it has changed it's XML3D
+            // representation at runtime.
             bool newObject = !m_createdObjects.Contains(entity.LocalId);
             if (newObject)
                 m_createdObjects.Add(entity.LocalId);
@@ -489,19 +492,19 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                 if (entity is ScenePresence) {
                     ScenePresence presence = entity as ScenePresence;
                     if (newObject) {
-                        Call("omp.objectSync.createObject", entity.LocalId,
+                        Call("omp.objectSync.createObject", entity.UUID.ToString(), entity.LocalId,
                              presence.Appearance.XML3D);
                     }
-                    Call("omp.objectSync.locationUpdate", entity.LocalId, presence.AbsolutePosition, 
-                         presence.Rotation, new Vector3(1, 1, 1));
+                    Call("omp.objectSync.locationUpdate", entity.LocalId,
+                         presence.AbsolutePosition, presence.Rotation, new Vector3(1, 1, 1));
                 } else if (entity is SceneObjectPart) {
                     SceneObjectPart objPart = entity as SceneObjectPart;
                     if (newObject) {
-                        Call("omp.objectSync.createObject", entity.LocalId,
+                        Call("omp.objectSync.createObject", entity.UUID, entity.LocalId, 
                              objPart.Shape.XML3D);
                     }
-                    Call("omp.objectSync.locationUpdate", entity.LocalId, objPart.AbsolutePosition, 
-                         objPart.GetWorldRotation(), objPart.Scale);
+                    Call("omp.objectSync.locationUpdate", entity.LocalId, 
+                         objPart.AbsolutePosition, objPart.GetWorldRotation(), objPart.Scale);
                 }
             }
         }
@@ -527,6 +530,17 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                 capsModule.GetChildrenSeeds(AgentId));
 
             return agentData;
+        }
+
+        public void Start()
+        {
+            m_server.AddSceneClient(this);
+
+            // Note sure why this is necessary, but LLClientView also calls this method in Start.
+            RefreshGroupMembership();
+
+            // Send initial data about the scene (objects, other avatars etc) to the client.
+            SceneAgent.SendInitialDataToMe();
         }
         #endregion
 
@@ -1097,11 +1111,6 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         }
 
         public void Kick(string message)
-        {
-            return; /* TODO(rryk): Implement */
-        }
-
-        public void Start()
         {
             return; /* TODO(rryk): Implement */
         }
