@@ -37,9 +37,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         }
 
         readonly public static List<string> LocalInterfaces = new List<string>{
-            "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara",
-            "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectServer.kiara",
-            "http://yellow.cg.uni-saarland.de/home/kiara/idl/chatServer.kiara"
+            Config.REMOTE_URL_IDL_PREFIX + "interface.kiara",
+            Config.REMOTE_URL_IDL_PREFIX + "connectServer.kiara",
+            Config.REMOTE_URL_IDL_PREFIX + "chatServer.kiara"
         };
         #endregion
 
@@ -316,20 +316,20 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
 
             KIARAInterface[] remoteInterfaces = 
-            { 
+            {
                 new KIARAInterface(
-                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara", true, 
+                    Config.REMOTE_URL_IDL_PREFIX + "interface.kiara", true,
                     "omp.interface.implements"),
                 new KIARAInterface(
-                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectClient.kiara", true, 
+                    Config.REMOTE_URL_IDL_PREFIX + "connectClient.kiara", true,
                     "omp.connectClient.handshake"),
                 new KIARAInterface(
-                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/chatClient.kiara", false, 
+                    Config.REMOTE_URL_IDL_PREFIX + "chatClient.kiara", false,
                     "omp.chatClient.messageFromServer"),
                 new KIARAInterface(
-                    "http://yellow.cg.uni-saarland.de/home/kiara/idl/objectSync.kiara", false, 
-                    "omp.objectSync.createObject", 
-                    "omp.objectSync.deleteObject", 
+                    Config.REMOTE_URL_IDL_PREFIX + "objectSync.kiara", false,
+                    "omp.objectSync.createObject",
+                    "omp.objectSync.deleteObject",
                     "omp.objectSync.locationUpdate")
             };
 
@@ -401,7 +401,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         #region IClientAPI implementation
          private bool ClientSupports(string shortInterfaceName) {
             return m_remoteInterfaces.Contains(
-                "http://yellow.cg.uni-saarland.de/home/kiara/idl/" + shortInterfaceName + ".kiara");
+                Config.REMOTE_URL_IDL_PREFIX + "" + shortInterfaceName + ".kiara");
         }
 
         public void SendRegionHandshake(RegionInfo regionInfo, RegionHandshakeArgs args)

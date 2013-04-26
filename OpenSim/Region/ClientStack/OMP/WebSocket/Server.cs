@@ -139,9 +139,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             private WebSocketHttpServerHandler m_handler;
         }
 
-        private static bool InterfaceImplements(string interfaceURI) 
+        private static bool InterfaceImplements(string interfaceURI)
         {
-            if (interfaceURI == "http://yellow.cg.uni-saarland.de/home/kiara/idl/connectInit.kiara")
+            if (interfaceURI == Config.REMOTE_URL_IDL_PREFIX + "connectInit.kiara")
                 return true;
             return Client.LocalInterfaces.Contains(interfaceURI);
         }
@@ -157,12 +157,12 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         
         private void HandleNewClient(string servicepath, WebSocketHttpServerHandler handler) {
             Connection conn = new Connection(new WSConnectionWrapper(handler));
-            conn.LoadIDL("http://yellow.cg.uni-saarland.de/home/kiara/idl/interface.kiara");
-            conn.LoadIDL("http://yellow.cg.uni-saarland.de/home/kiara/idl/connectInit.kiara");
+			conn.LoadIDL(Config.REMOTE_URL_IDL_PREFIX + "interface.kiara");
+            conn.LoadIDL(Config.REMOTE_URL_IDL_PREFIX + "connectInit.kiara");
             conn.RegisterFuncImplementation("omp.interface.implements", "...",
                 (Func<string, bool>)InterfaceImplements);
             conn.RegisterFuncImplementation("omp.connectInit.useCircuitCode", "...",
-                (Action<UInt32, string, string>)((code, agentID, sessionID) => 
+                (Action<UInt32, string, string>)((code, agentID, sessionID) =>
                   ConnectUseCircuitCode(conn, handler.RemoteIPEndpoint, code, agentID, sessionID)));
         }
 
