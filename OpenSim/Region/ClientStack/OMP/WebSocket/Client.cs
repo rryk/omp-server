@@ -39,7 +39,8 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         readonly public static List<string> LocalInterfaces = new List<string>{
             Config.REMOTE_URL_IDL_PREFIX + "interface.kiara",
             Config.REMOTE_URL_IDL_PREFIX + "connectServer.kiara",
-            Config.REMOTE_URL_IDL_PREFIX + "chatServer.kiara"
+            Config.REMOTE_URL_IDL_PREFIX + "chatServer.kiara",
+            Config.REMOTE_URL_IDL_PREFIX + "movement.kiara",
         };
         #endregion
 
@@ -164,74 +165,74 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 //            }
 //        }
 //
-//        private AgentUpdateArgs m_lastAgentUpdateArgs;
-//        private void HandleAgentUpdate(AgentUpdatePacket packet)
-//        {
-//            if (OnAgentUpdate != null) {
-//                if (packet.AgentData.SessionID != SessionId || packet.AgentData.AgentID != AgentId)
-//                    return;
-//
-//                bool update = false;
-//                AgentUpdatePacket.AgentDataBlock x = packet.AgentData;
-//
-//                if (m_lastAgentUpdateArgs != null)
-//                {
-//                    // These should be ordered from most-likely to
-//                    // least likely to change. I've made an initial
-//                    // guess at that.
-//                    update =
-//                       (
-//                        (x.BodyRotation != m_lastAgentUpdateArgs.BodyRotation) ||
-//                        (x.CameraAtAxis != m_lastAgentUpdateArgs.CameraAtAxis) ||
-//                        (x.CameraCenter != m_lastAgentUpdateArgs.CameraCenter) ||
-//                        (x.CameraLeftAxis != m_lastAgentUpdateArgs.CameraLeftAxis) ||
-//                        (x.CameraUpAxis != m_lastAgentUpdateArgs.CameraUpAxis) ||
-//                        (x.ControlFlags != m_lastAgentUpdateArgs.ControlFlags) ||
-//                        (x.Far != m_lastAgentUpdateArgs.Far) ||
-//                        (x.Flags != m_lastAgentUpdateArgs.Flags) ||
-//                        (x.State != m_lastAgentUpdateArgs.State) ||
-//                        (x.HeadRotation != m_lastAgentUpdateArgs.HeadRotation) ||
-//                        (x.SessionID != m_lastAgentUpdateArgs.SessionID) ||
-//                        (x.AgentID != m_lastAgentUpdateArgs.AgentID)
-//                       );
-//                }
-//                else
-//                {
-//                    m_lastAgentUpdateArgs = new AgentUpdateArgs();
-//                    update = true;
-//                }
-//
-//                if (update)
-//                {
-//                    m_log.DebugFormat("[LLCLIENTVIEW]: Triggered AgentUpdate for {0}", sener.Name);
-//
-//                    m_lastAgentUpdateArgs.AgentID = x.AgentID;
-//                    m_lastAgentUpdateArgs.BodyRotation = x.BodyRotation;
-//                    m_lastAgentUpdateArgs.CameraAtAxis = x.CameraAtAxis;
-//                    m_lastAgentUpdateArgs.CameraCenter = x.CameraCenter;
-//                    m_lastAgentUpdateArgs.CameraLeftAxis = x.CameraLeftAxis;
-//                    m_lastAgentUpdateArgs.CameraUpAxis = x.CameraUpAxis;
-//                    m_lastAgentUpdateArgs.ControlFlags = x.ControlFlags;
-//                    m_lastAgentUpdateArgs.Far = x.Far;
-//                    m_lastAgentUpdateArgs.Flags = x.Flags;
-//                    m_lastAgentUpdateArgs.HeadRotation = x.HeadRotation;
-//                    m_lastAgentUpdateArgs.SessionID = x.SessionID;
-//                    m_lastAgentUpdateArgs.State = x.State;
-//
-//                    UpdateAgent handlerAgentUpdate = OnAgentUpdate;
-//                    UpdateAgent handlerPreAgentUpdate = OnPreAgentUpdate;
-//
-//                    if (handlerPreAgentUpdate != null)
-//                        OnPreAgentUpdate(this, m_lastAgentUpdateArgs);
-//
-//                    if (handlerAgentUpdate != null)
-//                        OnAgentUpdate(this, m_lastAgentUpdateArgs);
-//
-//                    handlerAgentUpdate = null;
-//                    handlerPreAgentUpdate = null;
-//                }
-//            }
-//        }
+        private AgentUpdateArgs m_lastAgentUpdateArgs;
+        private void HandleAgentUpdate(AgentUpdatePacket packet)
+        {
+            if (OnAgentUpdate != null) {
+                if (packet.AgentData.SessionID != SessionId || packet.AgentData.AgentID != AgentId)
+                    return;
+
+                bool update = false;
+                AgentUpdatePacket.AgentDataBlock x = packet.AgentData;
+
+                if (m_lastAgentUpdateArgs != null)
+                {
+                    // These should be ordered from most-likely to
+                    // least likely to change. I've made an initial
+                    // guess at that.
+                    update =
+                       (
+                        (x.BodyRotation != m_lastAgentUpdateArgs.BodyRotation) ||
+                        (x.CameraAtAxis != m_lastAgentUpdateArgs.CameraAtAxis) ||
+                        (x.CameraCenter != m_lastAgentUpdateArgs.CameraCenter) ||
+                        (x.CameraLeftAxis != m_lastAgentUpdateArgs.CameraLeftAxis) ||
+                        (x.CameraUpAxis != m_lastAgentUpdateArgs.CameraUpAxis) ||
+                        (x.ControlFlags != m_lastAgentUpdateArgs.ControlFlags) ||
+                        (x.Far != m_lastAgentUpdateArgs.Far) ||
+                        (x.Flags != m_lastAgentUpdateArgs.Flags) ||
+                        (x.State != m_lastAgentUpdateArgs.State) ||
+                        (x.HeadRotation != m_lastAgentUpdateArgs.HeadRotation) ||
+                        (x.SessionID != m_lastAgentUpdateArgs.SessionID) ||
+                        (x.AgentID != m_lastAgentUpdateArgs.AgentID)
+                       );
+                }
+                else
+                {
+                    m_lastAgentUpdateArgs = new AgentUpdateArgs();
+                    update = true;
+                }
+
+                if (update)
+                {
+                    m_log.DebugFormat("[LLCLIENTVIEW]: Triggered AgentUpdate for {0}", this.Name);
+
+                    m_lastAgentUpdateArgs.AgentID = x.AgentID;
+                    m_lastAgentUpdateArgs.BodyRotation = x.BodyRotation;
+                    m_lastAgentUpdateArgs.CameraAtAxis = x.CameraAtAxis;
+                    m_lastAgentUpdateArgs.CameraCenter = x.CameraCenter;
+                    m_lastAgentUpdateArgs.CameraLeftAxis = x.CameraLeftAxis;
+                    m_lastAgentUpdateArgs.CameraUpAxis = x.CameraUpAxis;
+                    m_lastAgentUpdateArgs.ControlFlags = x.ControlFlags;
+                    m_lastAgentUpdateArgs.Far = x.Far;
+                    m_lastAgentUpdateArgs.Flags = x.Flags;
+                    m_lastAgentUpdateArgs.HeadRotation = x.HeadRotation;
+                    m_lastAgentUpdateArgs.SessionID = x.SessionID;
+                    m_lastAgentUpdateArgs.State = x.State;
+
+                    UpdateAgent handlerAgentUpdate = OnAgentUpdate;
+                    UpdateAgent handlerPreAgentUpdate = OnPreAgentUpdate;
+
+                    if (handlerPreAgentUpdate != null)
+                        OnPreAgentUpdate(this, m_lastAgentUpdateArgs);
+
+                    if (handlerAgentUpdate != null)
+                        OnAgentUpdate(this, m_lastAgentUpdateArgs);
+
+                    handlerAgentUpdate = null;
+                    handlerPreAgentUpdate = null;
+                }
+            }
+        }
 //
 //        private void HandleAgentWearablesRequest(AgentWearablesRequestPacket packet) {
 //            if (OnRequestWearables != null)
@@ -299,13 +300,13 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                     (Action<RegionHandshakeReplyPacket>)HandleHandshakeReply},
                 {"omp.chatServer.messageFromClient", 
                     (Action<ChatFromViewerPacket>)HandleMessageFromClient},
+                {"omp.movement.agentUpdate", (Action<AgentUpdatePacket>)HandleAgentUpdate},
 //                {"omp.connect.completeAgentMovement", (Action)HandleCompleteAgentMovement},
 //                {"omp.connect.logoutRequest", (Action<LogoutRequestPacket>)HandleLogoutRequest},
 //                {"omp.viewer.agentFOV", (Action<AgentFOVPacket>)HandleAgentFOV},
 //                {"omp.viewer.setAlwaysRun", (Action<SetAlwaysRunPacket>)HandleSetAlwaysRun},
 //                {"omp.agents.agentSetAppearanceXML3D", 
 //                    (Action<AgentSetAppearancePacket>)HandleAgentSetAppearance},
-//                {"omp.agents.agentUpdate", (Action<AgentUpdatePacket>)HandleAgentUpdate},
 //                {"omp.agents.agentWearablesRequest", 
 //                    (Action<AgentWearablesRequestPacket>)HandleAgentWearablesRequest},
 //                {"omp.agents.agentAnimation", (Action<AgentAnimationPacket>)HandleAgentAnimation},
