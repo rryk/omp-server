@@ -180,7 +180,7 @@ namespace OpenSim.Services.Interfaces
                     Data["_ap_" + attach.AttachPoint] = attach.ItemID.ToString();
             }
 
-            Data["XML"] = appearance.XML3D;
+            Data["XML3D"] = appearance.XML3D;
         }
 
         public AvatarAppearance ToAvatarAppearance()
