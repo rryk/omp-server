@@ -204,7 +204,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
                 if (update)
                 {
-                    m_log.DebugFormat("[LLCLIENTVIEW]: Triggered AgentUpdate for {0}", this.Name);
+                    m_log.DebugFormat("Triggered AgentUpdate for {0}", this.Name);
 
                     m_lastAgentUpdateArgs.AgentID = x.AgentID;
                     m_lastAgentUpdateArgs.BodyRotation = x.BodyRotation;
