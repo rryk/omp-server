@@ -120,6 +120,7 @@ namespace KIARA {
                     object retValOrException = data[3];
                     ActiveCalls[callID].SetResult(success ? "result" : "exception", 
                                                   retValOrException);
+                    ActiveCalls.Remove(callID);
                 }
                 else
                 {
