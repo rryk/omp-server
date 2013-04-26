@@ -52,6 +52,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 //            m_configSource = configSource;
             m_httpServer = MainServer.Instance;
             port = MainServer.Instance.Port;
+            FunctionCall.SetGlobalExceptionHandler((Action<Exception>)delegate(Exception exc){
+                m_log.Error("An exception was returned from the client", exc);
+            });
         }
 
         public void NetworkStop()

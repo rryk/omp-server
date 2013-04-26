@@ -31,17 +31,43 @@ namespace KIARA
             else if (eventName == "error")
                 OnError += (CallErrorCallback)handler;
 
+            if (haveCachedResult)
+                SetResult(cachedResultType, cachedArgument);
+
             return this;
+        }
+
+        // Allows to set up a global exception handler to handle all otherwise unhandled exceptions.
+        // This will override any previously configured global exception handler.
+        public static void SetGlobalExceptionHandler(Delegate exceptionHandler) {
+            globalExceptionHandler = exceptionHandler;
         }
         #endregion
 
         #region Private implementation
-        internal void SetResult(string eventName, object argument)
+        // This will be called after we loose all references to the call object. This means that no
+        // new handlers may be added. Then if we still have an exception as result and it haven't
+        // been handled, we either invoke a global exception handler if one was set or raise this
+        // exception.
+        ~FunctionCall()
         {
-            // TODO(rryk): Handle the case when result/error/exception arrives before the handlers 
-            // are set. Essentially this involves setting a flag that we do have a result and 
-            // calling the callbacks immediately after they are added via On(...) method.
-            if (eventName == "result")
+            if (haveCachedResult && cachedResultType == "exception" && !exceptionHaveBeenHandled) {
+                if (globalExceptionHandler != null) {
+                    Type retValueType =
+                        globalExceptionHandler.Method.GetParameters()[0].ParameterType;
+                    globalExceptionHandler.DynamicInvoke(
+                        ConversionUtils.CastJObject(cachedArgument, retValueType));
+                } else {
+                    throw new Error(ErrorCode.GENERIC_ERROR, "Received unhandled exception from " +
+                        "the remote end: " + cachedArgument.ToString()
+                    );
+                }
+            }
+        }
+
+        internal void SetResult(string resultType, object argument)
+        {
+            if (resultType == "result")
             {
                 // Cast return object to a specific type accepted by each individual result handler.
                 foreach (Delegate resultDelegate in OnResult)
@@ -58,7 +84,7 @@ namespace KIARA
                         null, ConversionUtils.CastJObject(argument, retValueType));
                 }
             }
-            else if (eventName == "exception")
+            else if (resultType == "exception")
             {
                 // Cast exception object to a specific type accepted by each individual result 
                 // handler.
@@ -77,11 +103,10 @@ namespace KIARA
                 }
 
                 // If no handlers are set, yet exception was returned - raise it.
-                if (OnException.Count == 0 && OnExcResult.Count == 0)
-                    throw new Error(ErrorCode.GENERIC_ERROR, "Received unhandled exception from " +
-                                    "the remote end: " + argument.ToString());
+                if (OnException.Count > 0 || OnExcResult.Count > 0)
+                    exceptionHaveBeenHandled = true;
             }
-            else if (eventName == "error")
+            else if (resultType == "error")
             {
                 if (argument.GetType() != typeof(string))
                 {
@@ -92,7 +117,19 @@ namespace KIARA
                     OnError((string)argument);
             }
             else
-                throw new Error(ErrorCode.INVALID_ARGUMENT, "Invalid event name: " + eventName);
+                throw new Error(ErrorCode.INVALID_ARGUMENT, "Invalid event name: " + resultType);
+
+            // Cache current result.
+            haveCachedResult = true;
+            cachedResultType = resultType;
+            cachedArgument = argument;
+
+            // Clean up existing handlers so that they are not invoked again (SetResult may be
+            // called again for newly added handlers).
+            OnResult.Clear();
+            OnException.Clear();
+            OnExcResult.Clear();
+            OnError = null;
         }
 
         private static bool ValidateNArgumentHandler(Delegate handler, int numArgs) {
@@ -125,6 +162,13 @@ namespace KIARA
         internal List<Delegate> OnException = new List<Delegate>();
         internal List<Delegate> OnExcResult = new List<Delegate>();
         internal event CallErrorCallback OnError;
+
+        private string cachedResultType = null;
+        private object cachedArgument = null;
+        private bool haveCachedResult = false;
+        private bool exceptionHaveBeenHandled = false;
+
+        private static Delegate globalExceptionHandler = null;
         #endregion
     }
 }
