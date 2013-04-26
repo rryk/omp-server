@@ -199,6 +199,7 @@ namespace OpenSim.Framework
             if (Appearance != null)
             {
                 args["appearance_serial"] = OSD.FromInteger(Appearance.Serial);
+                args["xml3d"] = OSD.FromString(Appearance.XML3D);
 
                 OSDMap appmap = Appearance.Pack();
                 args["packed_appearance"] = appmap;
@@ -312,6 +313,9 @@ namespace OpenSim.Framework
                 // packing in packed_appearance
                 if (args["appearance_serial"] != null)
                     Appearance.Serial = args["appearance_serial"].AsInteger();
+
+                if (args["xml3d"] != null)
+                    Appearance.XML3D = args["xml3d"].AsString();
 
                 if (args.ContainsKey("packed_appearance") && (args["packed_appearance"].Type == OSDType.Map))
                 {

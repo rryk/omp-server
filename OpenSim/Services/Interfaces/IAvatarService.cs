@@ -147,6 +147,7 @@ namespace OpenSim.Services.Interfaces
             Data = new Dictionary<string, string>();
 
             Data["Serial"] = appearance.Serial.ToString();
+            Data["XML3D"] = appearance.XML3D;
             // Wearables
             Data["AvatarHeight"] = appearance.AvatarHeight.ToString();
 
@@ -179,8 +180,6 @@ namespace OpenSim.Services.Interfaces
                 if (attach.ItemID != UUID.Zero)
                     Data["_ap_" + attach.AttachPoint] = attach.ItemID.ToString();
             }
-
-            Data["XML3D"] = appearance.XML3D;
         }
 
         public AvatarAppearance ToAvatarAppearance()
@@ -195,6 +194,9 @@ namespace OpenSim.Services.Interfaces
             {
                 if (Data.ContainsKey("Serial"))
                     appearance.Serial = Int32.Parse(Data["Serial"]);
+
+                if (Data.ContainsKey("XML3D"))
+                    appearance.XML3D = Data["XML3D"];
 
                 if (Data.ContainsKey("AvatarHeight"))
                     appearance.AvatarHeight = float.Parse(Data["AvatarHeight"]);
@@ -275,9 +277,6 @@ namespace OpenSim.Services.Interfaces
                     
                     appearance.VisualParams = binary;
                 }
-
-                if (Data.ContainsKey("XML3D"))
-                    appearance.XML3D = Data["XML3D"];
 
                 // New style wearables
                 foreach (KeyValuePair<string, string> _kvp in Data)

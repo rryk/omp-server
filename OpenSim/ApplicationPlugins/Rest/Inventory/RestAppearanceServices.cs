@@ -498,6 +498,11 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
                                     rdata.userAppearance.Serial = Convert.ToInt32(xml.Value);
                                     indata = true;
                                 }
+                                if (xml.MoveToAttribute("XML3D"))
+                                {
+                                    rdata.userAppearance.XML3D = xml.Value;
+                                    indata = true;
+                                }
                             break;
 /*
                             case "Body" :
@@ -750,6 +755,7 @@ namespace OpenSim.ApplicationPlugins.Rest.Inventory
 //                if (rdata.userAppearance.Owner != UUID.Zero)
 //                    rdata.writer.WriteAttributeString("Owner", rdata.userAppearance.Owner.ToString());
                 rdata.writer.WriteAttributeString("Serial", rdata.userAppearance.Serial.ToString());
+                rdata.writer.WriteAttributeString("XML3D", rdata.userAppearance.XML3D);
 
 /*
                 FormatPart(rdata, "Body", rdata.userAppearance.BodyItem, rdata.userAppearance.BodyAsset);

@@ -1778,6 +1778,8 @@ namespace OpenSim.Region.Framework.Scenes
             Array.Copy(Shape.ExtraParams, extraP, extraP.Length);
             dupe.Shape.ExtraParams = extraP;
 
+            dupe.Shape.XML3D = Shape.XML3D;
+
             dupe.DynAttrs.CopyFrom(DynAttrs);
             
             if (userExposed)

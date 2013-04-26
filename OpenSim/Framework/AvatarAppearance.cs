@@ -162,6 +162,8 @@ namespace OpenSim.Framework
 
             m_serial = appearance.Serial;
 
+            XML3D = appearance.XML3D;
+
             m_wearables = new AvatarWearable[AvatarWearable.MAX_WEARABLES];
             for (int i = 0; i < AvatarWearable.MAX_WEARABLES; i++)
                 m_wearables[i] = new AvatarWearable();

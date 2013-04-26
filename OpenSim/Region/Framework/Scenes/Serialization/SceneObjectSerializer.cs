@@ -1436,6 +1436,8 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
                 writer.WriteBase64(ep, 0, ep.Length);
                 writer.WriteEndElement(); // ExtraParams
 
+                writer.WriteElementString("XML3D", shp.XML3D);
+
                 writer.WriteElementString("PathBegin", shp.PathBegin.ToString());
                 writer.WriteElementString("PathCurve", shp.PathCurve.ToString());
                 writer.WriteElementString("PathEnd", shp.PathEnd.ToString());
