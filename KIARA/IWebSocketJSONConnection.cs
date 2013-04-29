@@ -109,16 +109,24 @@ namespace KIARA {
 
         private void HandleMessage(string message)
         {
-            List<object> data = JsonConvert.DeserializeObject<List<object>>(message);
+            List<object> data = null;
+
+            // FIXME: Occasionally we receive JSON with some random bytes appended. The reason is
+            // unclear, but to be safe we ignore messages that have parsing errors.
+            try {
+                data = JsonConvert.DeserializeObject<List<object>>(message);
+            } catch (JsonException) {
+                return;
+            }
+
             string msgType = (string)data[0];
             if (msgType == "call-reply")
             {
-                int callID = Convert.ToInt32(data[1]);
-                if (ActiveCalls.ContainsKey(callID))
+                int callID = Convert.ToInt32(data[1]); if (ActiveCalls.ContainsKey(callID))
                 {
                     bool success = (bool)data[2];
                     object retValOrException = data[3];
-                    ActiveCalls[callID].SetResult(success ? "result" : "exception", 
+                    ActiveCalls[callID].SetResult(success ? "result" : "exception",
                                                   retValOrException);
                     ActiveCalls.Remove(callID);
                 }
