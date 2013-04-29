@@ -1484,6 +1484,13 @@ namespace OpenSim.Region.Framework.Scenes
                 {
                     MovingToTarget = (agentData.ClientAgentPosition - AbsolutePosition).Length() > 0.2f;
                     MoveToPositionTarget = agentData.ClientAgentPosition;
+
+                    double terrainHeight = Scene.Heightmap[(int)agentData.ClientAgentPosition.X,
+                                                           (int)agentData.ClientAgentPosition.Y];
+                    if (agentData.ClientAgentPosition.Z < terrainHeight)
+                        agentData.ClientAgentPosition.Z = (float)terrainHeight;
+                    else if (agentData.ClientAgentPosition.Z > terrainHeight)
+                        Flying = true;
                 }
 
                 int i = 0;

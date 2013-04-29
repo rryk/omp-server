@@ -224,6 +224,9 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                     m_lastAgentUpdateArgs.HeadRotation = x.HeadRotation;
                     m_lastAgentUpdateArgs.SessionID = x.SessionID;
                     m_lastAgentUpdateArgs.State = x.State;
+
+                    // Use client agent's position.
+                    m_lastAgentUpdateArgs.ClientAgentPosition = x.CameraCenter;
                     m_lastAgentUpdateArgs.UseClientAgentPosition = true;
 
                     UpdateAgent handlerAgentUpdate = OnAgentUpdate;
