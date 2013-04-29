@@ -70,7 +70,13 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         }
 
         private void HandleHandshakeReply(RegionHandshakeReplyPacket packet) {
-            OnRegionHandShakeReply(this);
+            if (OnRegionHandShakeReply != null)
+                OnRegionHandShakeReply(this);
+
+            // This should be called in response to CompleteMovementToRegion packet, but we just
+            // call it immediately after handshake reply is received.
+            if (OnCompleteMovementToRegion != null)
+                OnCompleteMovementToRegion(this, true);
         }
 
         private void HandleMessageFromClient(ChatFromViewerPacket packet) {
@@ -218,6 +224,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                     m_lastAgentUpdateArgs.HeadRotation = x.HeadRotation;
                     m_lastAgentUpdateArgs.SessionID = x.SessionID;
                     m_lastAgentUpdateArgs.State = x.State;
+                    m_lastAgentUpdateArgs.UseClientAgentPosition = true;
 
                     UpdateAgent handlerAgentUpdate = OnAgentUpdate;
                     UpdateAgent handlerPreAgentUpdate = OnPreAgentUpdate;
