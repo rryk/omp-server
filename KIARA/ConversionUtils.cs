@@ -24,10 +24,8 @@ namespace KIARA
                 return obj;
             else if (destType.IsAssignableFrom(obj.GetType()))  // implicit cast will do the job
                 return obj;
-            else if (destType == typeof(JObject))               // got actual type, but need JObject
-                return new JObject(obj);
-            else if (obj is JObject) {                          // got JObject, but need actual type
-                return ((JObject)obj).ToObject(destType);
+            else if (obj is JToken) {                          // got JObject, but need actual type
+                return ((JToken)obj).ToObject(destType);
             }
             else                                                // nothing worked - just fail
                 throw new Error(ErrorCode.INVALID_TYPE,
