@@ -142,14 +142,19 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
             private WebSocketHttpServerHandler m_handler;
         }
 
-        private static bool InterfaceImplements(string interfaceURI)
+        private static List<bool> InterfaceImplements(List<string> interfaceURIs)
         {
-            if (interfaceURI == Config.REMOTE_URL_IDL_PREFIX + "connectInit.kiara")
-                return true;
-            return Client.LocalInterfaces.Contains(interfaceURI);
+            List<bool> result = new List<bool>();
+            foreach (string interfaceURI in interfaceURIs) {
+                if (interfaceURI == Config.REMOTE_URL_IDL_PREFIX + "connectInit.kiara")
+                    result.Add(true);
+                else
+                    result.Add(Client.LocalInterfaces.Contains(interfaceURI));
+            }
+            return result;
         }
 
-        void ConnectUseCircuitCode(Connection conn, IPEndPoint remoteEndPoint, uint code, 
+        void ConnectUseCircuitCode(Connection conn, IPEndPoint remoteEndPoint, uint code,
                                    string agentID, string sessionID)
         {
             AuthenticateResponse authResponse =
@@ -163,7 +168,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 			conn.LoadIDL(Config.REMOTE_URL_IDL_PREFIX + "interface.kiara");
             conn.LoadIDL(Config.REMOTE_URL_IDL_PREFIX + "connectInit.kiara");
             conn.RegisterFuncImplementation("omp.interface.implements", "...",
-                (Func<string, bool>)InterfaceImplements);
+                (Func<List<string>, List<bool>>)InterfaceImplements);
             conn.RegisterFuncImplementation("omp.connectInit.useCircuitCode", "...",
                 (Action<UInt32, string, string>)((code, agentID, sessionID) =>
                   ConnectUseCircuitCode(conn, handler.RemoteIPEndpoint, code, agentID, sessionID)));

@@ -64,9 +64,12 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         }
 
         #region Incoming message handlers
-        private bool HandleInterfaceImplements(string interfaceURI)
+        private List<bool> HandleInterfaceImplements(List<string> interfaceURIs)
         {
-            return LocalInterfaces.Contains(interfaceURI);
+            List<bool> result = new List<bool>();
+            foreach (string interfaceURI in interfaceURIs)
+                result.Add(LocalInterfaces.Contains(interfaceURI));
+            return result;
         }
 
         private void HandleHandshakeReply(RegionHandshakeReplyPacket packet) {
@@ -305,10 +308,11 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
         {
             Dictionary<string, Delegate> localFunctions = new Dictionary<string, Delegate>
             {
-                {"omp.interface.implements", (Func<string, bool>)HandleInterfaceImplements},
-                {"omp.connectServer.handshakeReply", 
+                {"omp.interface.implements",
+                    (Func<List<string>, List<bool>>)HandleInterfaceImplements},
+                {"omp.connectServer.handshakeReply",
                     (Action<RegionHandshakeReplyPacket>)HandleHandshakeReply},
-                {"omp.chatServer.messageFromClient", 
+                {"omp.chatServer.messageFromClient",
                     (Action<ChatFromViewerPacket>)HandleMessageFromClient},
                 {"omp.movement.agentUpdate", (Action<AgentUpdatePacket>)HandleAgentUpdate},
 //                {"omp.connect.completeAgentMovement", (Action)HandleCompleteAgentMovement},
@@ -353,59 +357,46 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                 m_connection.RegisterFuncImplementation(localFunction.Key, "...",
                                                         localFunction.Value);
             }
-            
+
             // Set up client interfaces.
-            // TODO(rryk): Not sure if callbacks may be executed in several threads at the same 
-            // time - perhaps we need a mutex for loadedInterfaces and failedToLoad.
-            int numInterfaces = remoteInterfaces.Length;
-            int checkedInterfaces = 0;
-            bool failedToLoad = false;
+            CallErrorCallback errorCallback = delegate(string reason) {
+                m_server.RemoveClient(this);
+                m_log.Error("Failed to acquire remote interfaces - " + reason);
+            };
 
-            Action<KIARAInterface, string> errorCallback = 
-                delegate(KIARAInterface ki, string reason) {
-                    if (!ki.Required)
+            Action<Exception> excCallback = delegate(Exception exception) {
+                errorCallback("exception returned by the client");
+            };
+
+            Action<List<bool>> resultCallback = delegate(List<bool> result) {
+                for (int i = 0; i < remoteInterfaces.Length; i++) {
+                    KIARAInterface ki = remoteInterfaces[i];
+                    if (!result[i] && ki.Required) {
+                        errorCallback("not supported by the client");
                         return;
-                    if (failedToLoad)
-                        return;
-                    failedToLoad = true;
-                    m_server.RemoveClient(this);
-                    m_log.Error("Failed to acquire '" + ki.URI + "' interface - " + reason);
-                };
-
-            Action<KIARAInterface, Exception> excCallback = 
-                delegate(KIARAInterface ki, Exception exception) {
-                    errorCallback(ki, "exception returned by the client");
-                };
-
-            Action<KIARAInterface, bool> resultCallback = delegate(KIARAInterface ki, bool result) {
-                if (failedToLoad)
-                    return;
-
-                if (!result && ki.Required) 
-                    errorCallback(ki, "not supported by the client");
-                else {
-                    // Set up client functions.
-                    if (result) {
+                    } else if (result[i]) {
                         foreach (string func in ki.Functions)
                             m_functions[func] = m_connection.GenerateFunctionWrapper(func, "...");
                         m_remoteInterfaces.Add(ki.URI);
                     }
-
-                    checkedInterfaces += 1;
-                    if (checkedInterfaces == numInterfaces)
-                        Start();
                 }
+
+                Start();
             };
 
-            FunctionWrapper implements = 
+            FunctionWrapper implements =
                 m_connection.GenerateFunctionWrapper("omp.interface.implements", "...");
+
+            List<string> remoteInterfaceURIs = new List<string>();
             foreach (KIARAInterface ki in remoteInterfaces) {
-                KIARAInterface ki_copy = ki;
-                implements(ki.URI)
-                    .On("error", (CallErrorCallback)((reason) => errorCallback(ki_copy, reason)))
-                    .On("result", (Action<bool>)((result) => resultCallback(ki_copy, result)))
-                    .On("exception", (Action<Exception>)((exc) => excCallback(ki_copy, exc)));
+                m_connection.LoadIDL(ki.URI);
+                remoteInterfaceURIs.Add(ki.URI);
             }
+
+            implements(remoteInterfaceURIs)
+                .On("error", errorCallback)
+                .On("result", resultCallback)
+                .On("exception", excCallback);
         }
         #endregion
 
