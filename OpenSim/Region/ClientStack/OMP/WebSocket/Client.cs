@@ -230,7 +230,7 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
 
                     // Use client agent's position.
                     m_lastAgentUpdateArgs.ClientAgentPosition = x.CameraCenter;
-                    m_lastAgentUpdateArgs.UseClientAgentPosition = true;
+                    m_lastAgentUpdateArgs.UseClientAgentPosition = false;
 
                     UpdateAgent handlerAgentUpdate = OnAgentUpdate;
                     UpdateAgent handlerPreAgentUpdate = OnPreAgentUpdate;
