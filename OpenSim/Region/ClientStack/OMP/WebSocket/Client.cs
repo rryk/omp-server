@@ -497,8 +497,11 @@ namespace OpenSim.Region.ClientStack.OMP.WebSocket
                         Call("omp.objectSync.createObject", entity.UUID.ToString(), entity.LocalId,
                              presence.Appearance.XML3D);
                     }
+                    Vector3 scale = new Vector3(0.45f, 0.6f, 1.75f);
+                    if (presence.PhysicsActor != null)
+                        scale = presence.PhysicsActor.Size;
                     Call("omp.objectSync.locationUpdate", entity.LocalId,
-                         presence.AbsolutePosition, presence.Rotation, new Vector3(1, 1, 1));
+                         presence.AbsolutePosition, presence.Rotation, scale);
                 } else if (entity is SceneObjectPart) {
                     SceneObjectPart objPart = entity as SceneObjectPart;
                     if (newObject) {
