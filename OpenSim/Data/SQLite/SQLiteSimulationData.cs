@@ -2429,8 +2429,9 @@ namespace OpenSim.Data.SQLite
             if (!(row["Media"] is System.DBNull))
                 s.Media = PrimitiveBaseShape.MediaList.FromXml((string)row["Media"]);
 
-            s.XML3D = (string)row["XML3D"];
-                        
+            if (!(row["XML3D"] is System.DBNull))
+                s.XML3D = (string)row["XML3D"];
+
             return s;
         }
 
